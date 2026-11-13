@@ -1,0 +1,54 @@
+name: Keep & Flip - Cardmarket daily data sync
+on:
+  schedule:
+    # 04:35 UTC, after the usual nightly Cardmarket price guide update
+    - cron: '35 4 * * *'
+  workflow_dispatch:
+    inputs:
+      refresh_catalog:
+        description: 'Force fresh singles + sealed catalog from Cardmarket'
+        required: false
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: cardmarket-pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: .cache/cardmarket
+          key: cm-pokemon-catalog-${{ github.run_id }}
+          restore-keys: |
+            cm-pokemon-catalog-
+      - name: Download, validate and prepare Cardmarket datasets
+        env:
+          FORCE_CATALOG: ${{ inputs.refresh_catalog }}
+        run: |
+          if [ "$FORCE_CATALOG" = "true" ]; then
+            python scripts/build_data.py --refresh-catalog
+          else
+            python scripts/build_data.py
+          fi
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload static data files
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Publish GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
