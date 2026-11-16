@@ -120,3 +120,41 @@ test('Worker fetches live JP sealed product, proves 20 x 7, skips Google Search'
     assert.equal(out.sources.some(s=>s.url===jpUrl),true);
   } finally{globalThis.fetch=orig;}
 });
+
+
+test('Shopify text/javascript product endpoint verifies fields missing from HTML wrapper',async()=>{
+  const saved=globalThis.fetch;
+  globalThis.fetch=async input=>{
+    const url=String(input);
+    if (url.includes('api.tcgdex.net/'))return new Response('[]',{
+      headers:{'Content-Type':'application/json'}
+    });
+    if (url.includes('search/suggest.json'))return fakeShopify(
+      url.startsWith('https://rarecards.nl/') ?
+        [{ title:'Pokémon (JP) 151: Booster Box',url:'/en/products/pokemon-jp-151-booster-box' }]:[]);
+    if (url.endsWith('/pokemon-jp-151-booster-box.js'))return new Response(JSON.stringify({
+      title:'Pokémon (JP) 151: Booster Box',
+      description:'<p>Aantal booster packs per box: 20 packs</p><p>Aantal kaarten per pack: 7 kaarten</p><p>Taal: Japans</p>'
+    }),{headers:{'Content-Type':'text/javascript; charset=utf-8'}});
+    if (url.endsWith('/pokemon-jp-151-booster-box')) return new Response(
+      '<html><h1>Pokémon (JP) 151: Booster Box</h1><script type="application/json">irrelevant data</script></html>',
+      {headers:{'Content-Type':'text/html'}});
+    return new Response('No',{status:404});
+  };
+  try {
+    const response=await worker.fetch(new Request(base+'/lookup',{
+      method:'POST',
+      headers:{Authorization:'Bearer test-token',Origin:base,'Content-Type':'application/json'},
+      body:JSON.stringify({ productName:jpName,productType:'box',language:'JP'})
+    }),{
+      KEEPFLIP_ACCESS_TOKEN:'test-token',APP_ORIGIN:'https://gregncheese.github.io',
+      DIRECT_WEB_DISCOVERY:'true',ENABLE_GOOGLE_SEARCH:'false'
+    });
+    const out=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(out.suggestedCount,20);
+    assert.equal(out.suggestedCardsPerPack,7);
+    assert.equal(out.suggestedLanguage,'JP');
+    assert.equal(out.diagnostics.productJsonFetch[0].status,'verified-title');
+  } finally{ globalThis.fetch=saved; }
+});
