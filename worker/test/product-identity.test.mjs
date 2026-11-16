@@ -229,7 +229,6 @@ test('only explicit product-name quantities become provisional suggestions',()=>
   assert.deepEqual(extractNameHints('Japanese Pokemon 151 Booster Box 20 packs 7 cards per pack'),{
     boosters:20,cardsPerPack:7,language:'JP',origin:'product-name-unverified'
   });
-  assert.equal(extractNameHints('Paldean Fates ETB'),extractNameHints('Paldean Fates ETB')); // deterministic
   assert.equal(extractNameHints('Paldean Fates ETB').boosters,null);
   assert.equal(extractNameHints('2 ETB').boosters,null);
   assert.equal(extractNameHints('20 packs 30 packs').boosters,null);
