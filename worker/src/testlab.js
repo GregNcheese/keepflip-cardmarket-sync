@@ -73,13 +73,13 @@ a{color:#91e8ff;overflow-wrap:anywhere}.source .small{color:var(--muted)}summary
         <div class="headline"><strong id="resultName"></strong><span id="resultStatus" class="pill"></span></div>
         <p id="summary" class="small"></p>
         <div id="metrics" class="grid"></div>
-        <div class="detail"><h3>Google Search / broncontrole</h3><div id="discovery" class="small"></div></div>
+        <div class="detail"><h3>Live online zoeken / broncontrole</h3><div id="discovery" class="small"></div></div>
         <div class="detail"><h3>Gevonden bronnen</h3><div id="sources"></div></div>
         <div id="suggestionsWrap" class="detail" hidden><h3>Google Search-suggesties</h3><iframe id="suggestions" title="Google Search-suggesties" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe></div>
         <div class="detail"><details><summary>Technische details (zonder toegangstoken)</summary><div class="actions" style="margin:8px 0"><button id="copy" class="secondary" type="button">Kopieer JSON</button></div><pre id="raw" class="pre"></pre></details></div>
       </div>
     </section>
-    <section class="panel"><h2>Wat telt als betrouwbaar?</h2><p class="small">Een veld is alleen <strong style="color:#83f1ce">bevestigd</strong> wanneer de Worker er gecontroleerd bewijs voor heeft. Een voorstel op basis van de naam is <strong style="color:#ffd18b">voorlopig</strong>. Ontbrekende informatie wordt niet verzonnen.</p><p class="small" style="margin:0">Let op: \`groundingUsed: true\` laat zien dat Google Search-resultaten zijn gebruikt, niet dat alle productvelden kloppen.</p></section>
+    <section class="panel"><h2>Wat telt als betrouwbaar?</h2><p class="small">Een veld is alleen <strong style="color:#83f1ce">bevestigd</strong> wanneer de Worker er gecontroleerd bewijs voor heeft. Een voorstel op basis van de naam is <strong style="color:#ffd18b">voorlopig</strong>. Ontbrekende informatie wordt niet verzonnen.</p><p class="small" style="margin:0">Live winkelzoekresultaten worden eerst op titel en uitvoering gecontroleerd; alleen de gelezen productpagina kan aantallen onderbouwen. Google Search-grounding is in deze gratis test uitgeschakeld.</p></section>
   </div>
 </div>
 </main>
@@ -105,8 +105,8 @@ a{color:#91e8ff;overflow-wrap:anywhere}.source .small{color:var(--muted)}summary
       var data=await r.json();
       $('version').textContent='Versie '+(data.version||'?');
       if(data.version!=='2.1.8'){setPill($('health'),'Verkeerde Worker','bad');return;}
-      if(!data.geminiConfigured || !data.googleSearchEnabled || !data.accessConfigured){setPill($('health'),'Configuratie onvolledig','warn');return;}
-      setPill($('health'),'Online · Search klaar','ok');
+      if(!data.liveSearchEnabled || !data.accessConfigured){setPill($('health'),'Configuratie onvolledig','warn');return;}
+      setPill($('health'),'Online · Live zoeken actief','ok');
     }catch(err){setPill($('health'),'Verbinding mislukt','bad');$('version').textContent=String(err.message||err);}
   }
   $('refresh').addEventListener('click',health);
@@ -135,8 +135,11 @@ a{color:#91e8ff;overflow-wrap:anywhere}.source .small{color:var(--muted)}summary
       fieldCard('Producttype',data.suggestedProductType||data.productType,verified.productType,provisional.productType)
     );
     var d=data.diagnostics&&data.diagnostics.googleDiscovery||{},box=$('discovery');box.replaceChildren();
+    var live=data.diagnostics&&data.diagnostics.liveDiscovery||{};
+    box.append(line('Live zoeken: '+(live.status||'niet uitgevoerd')+' · exacte productkandidaten: '+(live.matchedProducts??0)));
+    (live.providers||[]).forEach(function(provider){box.append(line(provider.source+': '+provider.status+' · gevonden titels: '+provider.candidates));});
     var used=data.groundingUsed===true?'Ja':'Nee';
-    box.append(line('Google Search grounding: '+used+' · status: '+(d.status||'niet gerapporteerd')));
+    box.append(line('Gemini Google Search: '+(d.status==='disabled-direct-search'?'niet nodig (uitgeschakeld)':'grounding '+used+' · '+(d.status||'niet gerapporteerd'))));
     box.append(line('Zoekqueries: '+(d.queryCount??'—')+' · officiële kandidaten: '+(d.officialCandidates??'—')+' · winkels: '+(d.retailerCandidates??'—')));
     box.append(line('Broninformatie bevestigd: '+(data.sourceVerified?'gedeeltelijk/volledig':'nee')+' · Gemini antwoord: '+(data.geminiResponded?'ja':'nee')));
     if (d.status==='gemini-http-429'){
