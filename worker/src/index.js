@@ -2080,3 +2080,6 @@ export default {
     }
   }
 };
+
+// Pure helper exported for regression tests; no public HTTP exposure.
+export { countFromText };
