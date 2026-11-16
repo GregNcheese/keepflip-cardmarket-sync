@@ -22,8 +22,11 @@ export function parseGroundedProductUrls(response, isOfficial, isRetail) {
   const meta = candidate.groundingMetadata;
   const chunks = Array.isArray(meta?.groundingChunks) ? meta.groundingChunks : [];
   const queries = Array.isArray(meta?.webSearchQueries) ? meta.webSearchQueries : [];
-  const entryPoint = typeof meta?.searchEntryPoint?.renderedContent === 'string'
-    ? meta.searchEntryPoint.renderedContent.slice(0, 20000) : '';
+  // Google requires the returned Search Suggestions HTML to be displayable as-is.
+  // Do not clip it in the middle of a tag; omit an abnormally huge snippet.
+  const searchSnippet = meta?.searchEntryPoint?.renderedContent;
+  const entryPoint = typeof searchSnippet === 'string' && searchSnippet.length <= 64000
+    ? searchSnippet : '';
   const actualGrounding = chunks.some(item =>
     typeof item?.web?.uri === 'string' && item.web.uri.length > 0);
   // Without real grounding, reject every model-suggested URL.
