@@ -19,14 +19,14 @@ function registryProduct(overrides = {}) {
   };
 }
 
-async function lookup(product, registryRows, officialHtml) {
+async function lookup(product, registryRows, officialHtml, setRows = []) {
   const saved = globalThis.fetch;
   globalThis.fetch = async input => {
     const url = String(input);
     if (url === registry) return new Response(JSON.stringify({ products: registryRows }), {
       status: 200, headers: { 'content-type': 'application/json' }
     });
-    if (url.includes('/sets')) return new Response(JSON.stringify([]), {
+    if (url.includes('/sets')) return new Response(JSON.stringify(setRows), {
       status: 200, headers: { 'content-type': 'application/json' }
     });
     if (url.startsWith('https://www.pokemon.com/') && officialHtml) {
@@ -148,4 +148,41 @@ test('autofill language requires an explicit statement and disallows contradicti
   assert.equal(explicitCardLanguage('Product language: traditional chinese'), 'ZH-TW');
   assert.equal(explicitCardLanguage('Japanese Pokémon card sold by an English shop'), null);
   assert.equal(explicitCardLanguage('Card language: English. Card language: Japanese.'), null);
+});
+
+test('without a registry, extracts all four proven fields from exact official product page', async () => {
+  const officialHtml = [
+    '<!doctype html><html>',
+    '<title>Scarlet Violet Paldean Fates Booster Bundle</title>',
+    '<main><h1>Scarlet Violet Paldean Fates Booster Bundle</h1>',
+    '<p>Includes 6 booster packs. Each booster pack contains 10 game cards.</p>',
+    '<p>Card language: English</p></main></html>'
+  ].join('');
+  const result = await lookup(
+    {productName, productType:'other'},
+    [],
+    officialHtml,
+    [{ id:'sv4.5',name:'Paldean Fates' }]
+  );
+  assert.equal(result.suggestedProductType, 'bundle');
+  assert.equal(result.suggestedCount, 6);
+  assert.equal(result.suggestedCardsPerPack, 10);
+  assert.equal(result.suggestedSet, 'Paldean Fates');
+  assert.equal(result.suggestedLanguage, 'EN');
+  assert.equal(result.verifiedFields.boosters, true);
+  assert.equal(result.verifiedFields.cardsPerPack, true);
+  assert.equal(result.verifiedFields.set, true);
+  assert.equal(result.verifiedFields.language, true);
+  assert.equal(result.status, 'match');
+  assert.equal(result.requiresConfirmation, true);
+});
+
+test('when independent sources fail, counts are not invented', async () => {
+  const result = await lookup({productName,productType:'other'},[],null);
+  assert.equal(result.suggestedProductType,'bundle');
+  assert.equal(result.suggestedCount,null);
+  assert.equal(result.suggestedCardsPerPack,null);
+  assert.equal(result.verifiedFields.boosters,false);
+  assert.equal(result.verifiedFields.cardsPerPack,false);
+  assert.equal(result.requiresConfirmation,true);
 });
