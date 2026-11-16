@@ -1,0 +1,47 @@
+name: Keep & Flip Worker Preview health check (NO DEPLOY)
+on:
+  push:
+    branches:
+      - test/cloudflare-worker-autofill-216-fresh-preview
+    paths:
+      - "worker/**"
+      - "wrangler.jsonc"
+      - ".github/workflows/worker-preview-health-check.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check-preview-health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify published preview config without secrets
+        env:
+          PREVIEW_HEALTH_URL: https://test-cloudflare-worker-autofill-216-fresh-previ-late-smoke-2a21.chokorii.workers.dev/health
+        run: |
+          python3 - <<'PY'
+          import json, os, time, urllib.request, urllib.error, sys
+          url = os.environ['PREVIEW_HEALTH_URL']
+          last = None
+          for i in range(16):
+              try:
+                  req = urllib.request.Request(url,headers={'Accept':'application/json','User-Agent':'KeepFlip-Worker-Preview-Smoke/1.0'})
+                  with urllib.request.urlopen(req,timeout=12) as response:
+                      data = json.load(response)
+                  checks = {
+                      'version-2.1.6': data.get('version')=='2.1.6',
+                      'online': data.get('status')=='online',
+                      'access-secret-configured': data.get('accessConfigured') is True,
+                      'registry-url-configured': data.get('registryConfigured') is True,
+                      'google-search-disabled': data.get('googleSearchEnabled') is False,
+                  }
+                  print('Preview health:', {k: bool(v) for k,v in checks.items()})
+                  if all(checks.values()):
+                      print('Preview config OK (no sensitive values requested or logged)')
+                      sys.exit(0)
+                  last = f'Incomplete configuration: {[k for k,v in checks.items() if not v]}'
+              except (OSError,ValueError,TypeError) as exc:
+                  last = f'Preview health request failed ({type(exc).__name__})'
+              if i<15: time.sleep(6)
+          sys.exit('Preview health check failed: '+str(last))
+          PY
+# Public health endpoint only; NEVER send secrets or call the private lookup endpoint.
