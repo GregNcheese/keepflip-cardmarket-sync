@@ -3,7 +3,7 @@
  * No persistent tokens, no automatic paid lookups, and no inventory writes.
  */
 export function renderTestLab() {
-  return String.raw\`<!doctype html>
+  return String.raw`<!doctype html>
 <html lang="nl">
 <head>
 <meta charset="utf-8">
@@ -182,5 +182,5 @@ a{color:#91e8ff;overflow-wrap:anywhere}.source .small{color:var(--muted)}summary
   });
 })();
 </script>
-</body></html>\`;
+</body></html>`;
 }
