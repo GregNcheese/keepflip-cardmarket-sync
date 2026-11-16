@@ -1,10 +1,10 @@
 {
   "schema": "keepflip-photo-rescue-v1",
-  "generatedAt": "2026-11-16T08:58:53+00:00",
+  "generatedAt": "2026-11-16T09:00:43+00:00",
   "notes": "Only source URL metadata. Do not rehost images; card photo is not proof of print version.",
   "summary": {
     "checked": 3,
-    "officialImagesVerified": 0
+    "officialImagesVerified": 3
   },
   "cards": [
     {
@@ -17,11 +17,11 @@
       "cardmarketCandidateId": 557397,
       "source": "pokemon-card.com official JP card database",
       "sourcePage": "https://www.pokemon-card.com/card-search/details.php/card/36361/regu/XY",
-      "photoUrl": null,
-      "photoStatus": "source-mismatch",
+      "photoUrl": "https://www.pokemon-card.com/assets/images/card_images/large/SM10/036361_P_MASHADOKAIRIKIGX.jpg",
+      "photoStatus": "verified-official-card-image",
       "printVerified": false,
       "priceVerified": false,
-      "details": "Official page did not confirm the expected set and collector number"
+      "details": "Official Japanese page set + collector number and JPEG are verified; variant still review-only"
     },
     {
       "cardId": "sm11-054",
@@ -33,11 +33,11 @@
       "cardmarketCandidateId": 557016,
       "source": "pokemon-card.com official JP card database",
       "sourcePage": "https://www.pokemon-card.com/card-search/details.php/card/36801/regu/all",
-      "photoUrl": null,
-      "photoStatus": "source-mismatch",
+      "photoUrl": "https://www.pokemon-card.com/assets/images/card_images/large/SM11/036801_P_MEGAYAMIRAMIBANGIRASUGX.jpg",
+      "photoStatus": "verified-official-card-image",
       "printVerified": false,
       "priceVerified": false,
-      "details": "Official page did not confirm the expected set and collector number"
+      "details": "Official Japanese page set + collector number and JPEG are verified; variant still review-only"
     },
     {
       "cardId": "cp6-015",
@@ -49,11 +49,11 @@
       "cardmarketCandidateId": 562471,
       "source": "pokemon-card.com official JP card database",
       "sourcePage": "https://www.pokemon-card.com/card-search/details.php/card/32221/regu/XY",
-      "photoUrl": null,
-      "photoStatus": "source-mismatch",
+      "photoUrl": "https://www.pokemon-card.com/assets/images/card_images/large/CP6/032221_P_KYUUKON.jpg",
+      "photoStatus": "verified-official-card-image",
       "printVerified": false,
       "priceVerified": false,
-      "details": "Official page did not confirm the expected set and collector number"
+      "details": "Official Japanese page set + collector number and JPEG are verified; variant still review-only"
     }
   ]
 }
