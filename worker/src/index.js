@@ -497,6 +497,19 @@ function exactRetailTitleMatches(html, name, type) {
     (type !== 'bundle' || h.includes('bundle'));
   });
 }
+// Product storefronts can redirect /en/products/x to /products/x.
+// Compare only canonical paths on the SAME approved HTTPS origin.
+function sameRetailProduct(left, right) {
+  try {
+    const a = new URL(left);
+    const b = new URL(right);
+    const canonical = u => u.pathname
+      .replace(/^\/(?:en|nl|de|fr)\/products\//, '/products/')
+      .replace(/\/$/, '');
+    return a.protocol === 'https:' &&
+      a.origin === b.origin && canonical(a) === canonical(b);
+  } catch { return false; }
+}
 async function fetchRetail(url, env, hops = 0) {
   const safe = safeRetailUrl(url, env);
   if (!safe) {
@@ -1433,7 +1446,7 @@ async function lookup(data, env) {
           status: x.status,
           titleMatch: !!(
             x.html && (
-              live.retailUrls.includes(x.url)
+              live.retailUrls.some(source => sameRetailProduct(source, x.url))
                 ? [...x.html.matchAll(/<(?:h1|title)\b[^>]*>([\s\S]*?)<\/(?:h1|title)>/gi)]
                     .some(m => matchesLiveProductTitle(
                       name, htmlText(m[1]), type, language
@@ -1443,7 +1456,7 @@ async function lookup(data, env) {
           )
         }));
       for (const item of checkedRetail) {
-        const isLiveCandidate = live.retailUrls.includes(item.url);
+        const isLiveCandidate = live.retailUrls.some(source => sameRetailProduct(source, item.url));
         const matchLive = isLiveCandidate &&
           [...String(item.html || '').matchAll(/<(?:h1|title)\b[^>]*>([\s\S]*?)<\/(?:h1|title)>/gi)]
             .some(x => matchesLiveProductTitle(
