@@ -1,0 +1,115 @@
+{
+  "schema": "keepflip-cardmarket-identity-v1",
+  "generatedAt": "2026-11-16T06:10:24+00:00",
+  "catalogCreatedAt": "2026-11-15T12:29:32+0100",
+  "priceCreatedAt": "2026-11-16T02:48:57+0100",
+  "notes": "TEST snapshot, not a live published data feed. Only configured cards; V1/V2 print versions remain review-only.",
+  "results": [
+    {
+      "label": "Altaria",
+      "url": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Hidden-Fates/Altaria-HIFSV37",
+      "tcgdexSetId": "sma",
+      "language": "en",
+      "localNumber": "SV37",
+      "variant": "",
+      "productId": null,
+      "candidateIds": [],
+      "status": "missing-id",
+      "reason": "TCGdex has no Cardmarket ID for this card",
+      "hasOfficialPrice": false,
+      "evidence": {
+        "tcgdexCardId": "sma-SV37",
+        "tcgdexSet": "sma",
+        "tcgdexNumber": "SV37"
+      }
+    },
+    {
+      "label": "Mega Sableye & Tyranitar GX",
+      "url": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Miracle-Twin/Mega-Sableye-Tyranitar-GX-V1-sm11054",
+      "tcgdexSetId": "sm11",
+      "language": "ja",
+      "localNumber": "054",
+      "variant": "V1",
+      "productId": 557016,
+      "candidateIds": [
+        557016
+      ],
+      "status": "variant-review",
+      "reason": "Cardmarket ID identified, but V1 has no independent print evidence",
+      "hasOfficialPrice": true,
+      "evidence": {
+        "tcgdexCardId": "SM11-054",
+        "tcgdexSet": "SM11",
+        "tcgdexNumber": "054",
+        "cardmarketName": "Mega Sableye & Tyranitar GX [Greedy Crush | Gigafall GX]",
+        "cardmarketExpansionId": 3816
+      }
+    },
+    {
+      "label": "Marshadow & Machamp GX",
+      "url": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Double-Blaze/Marshadow-Machamp-GX-V1-sm10042",
+      "tcgdexSetId": "sm10",
+      "language": "ja",
+      "localNumber": "042",
+      "variant": "V1",
+      "productId": 557397,
+      "candidateIds": [
+        557397
+      ],
+      "status": "variant-review",
+      "reason": "Cardmarket ID identified, but V1 has no independent print evidence",
+      "hasOfficialPrice": true,
+      "evidence": {
+        "tcgdexCardId": "SM10-042",
+        "tcgdexSet": "SM10",
+        "tcgdexNumber": "042",
+        "cardmarketName": "Marshadow & Machamp GX [Revenge | Hundred-Blows Impact | Acme of Heroism GX]",
+        "cardmarketExpansionId": 3836
+      }
+    },
+    {
+      "label": "Jolteon ex",
+      "url": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Terastal-Festival-ex/Jolteon-ex-V1-sv8a052",
+      "tcgdexSetId": "sv8a",
+      "language": "ja",
+      "localNumber": "052",
+      "variant": "V1",
+      "productId": 803165,
+      "candidateIds": [
+        803165
+      ],
+      "status": "variant-review",
+      "reason": "Cardmarket ID identified, but V1 has no independent print evidence",
+      "hasOfficialPrice": true,
+      "evidence": {
+        "tcgdexCardId": "SV8a-052",
+        "tcgdexSet": "SV8a",
+        "tcgdexNumber": "052",
+        "cardmarketName": "Jolteon ex [Flashing Spear | Dravite]",
+        "cardmarketExpansionId": 5928
+      }
+    },
+    {
+      "label": "Team Magma's Houndoom",
+      "url": "https://www.cardmarket.com/en/Pokemon/Products/Singles/EX-Team-Magma-vs-Team-Aqua/Team-Magmas-Houndoom-MA34?minCondition=4&isFirstEd=Y",
+      "tcgdexSetId": "ex4",
+      "language": "en",
+      "localNumber": "34",
+      "variant": "",
+      "productId": null,
+      "candidateIds": [
+        275811
+      ],
+      "status": "name-review",
+      "reason": "TCGdex Cardmarket ID points to a different card name; do not use it automatically",
+      "hasOfficialPrice": false,
+      "evidence": {
+        "tcgdexCardId": "ex4-34",
+        "tcgdexSet": "ex4",
+        "tcgdexNumber": "34",
+        "cardmarketName": "Delcatty [Scratch | Ultra Energy Source]",
+        "possibleOfficialProducts": []
+      }
+    }
+  ]
+}
