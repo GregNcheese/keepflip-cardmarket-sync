@@ -17,6 +17,7 @@
       // Live product discovery without paid Google Search or additional API keys.
       "ENABLE_GOOGLE_SEARCH": "false",
       "DIRECT_WEB_DISCOVERY": "true",
+      "CARDOS_TEST_ALLOW_FILE_ORIGIN": "true",
       "KEEPFLIP_REGISTRY_URL": "https://raw.githubusercontent.com/GregNcheese/keepflip-cardmarket-sync/refs/heads/test/cloudflare-worker-autofill-216-fresh-preview/worker/data/verified-products-starter.json"
     }
   }
