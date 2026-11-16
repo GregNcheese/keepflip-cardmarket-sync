@@ -63,6 +63,9 @@ export function matchesLiveProductTitle(name, title, type, language) {
   // Never confuse the Pokémon Center version with a normal box, or no-shrink
   // with factory-sealed boxes.
   if (requested.includes('pokemon center') !== actual.includes('pokemon center')) return false;
+  // A display of multiple bundles is not one Booster Bundle.
+  if (type === 'bundle' && (actual.includes('display') !== requested.includes('display'))) return false;
+  if (requested.includes('sleeved') !== actual.includes('sleeved')) return false;
   if (requested.includes('no shrink') !== actual.includes('no shrink')) return false;
   if (requested.includes('deluxe') !== actual.includes('deluxe')) return false;
   const required = [...new Set(coreTerms(name))];
