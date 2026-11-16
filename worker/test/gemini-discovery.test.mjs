@@ -185,3 +185,57 @@ test('a non-grounded answer with plausible URLs is ignored',async()=>{
   assert.equal(result.diagnostics.googleDiscovery.status,'no-grounding');
   assert.equal(result.verifiedFields.boosters,false);
 });
+
+test('Gemini can find a correct retailer product page when no official page is reachable',async()=>{
+  const html='<html><main><h1>'+name+'</h1>'+
+    '<p>Includes 6 booster packs. Each booster pack contains 10 game cards.</p>'+
+    '<p>Card language: English</p></main></html>';
+  const {result,calls}=await offlineLookup({productName:name,productType:'bundle'},{
+    geminiResponse:aiResponse('Found direct retail product page '+retail,[retail]),
+    pages:{[retail]:html},
+    sets:[{name:'Aurora Chorus',id:'test-001'}]
+  });
+  assert.equal(calls.gemini,1);
+  assert.equal(result.diagnostics.googleDiscovery.retailerCandidates,1);
+  assert.equal(result.suggestedCount,6);
+  assert.equal(result.suggestedCardsPerPack,10);
+  assert.equal(result.suggestedLanguage,'EN');
+  assert.equal(result.verifiedFields.boosters,true);
+  assert.equal(result.verifiedFields.cardsPerPack,true);
+  assert.equal(result.status,'partial'); // Product type remains name-hint, no official h1.
+  assert.ok(result.sources.some(x=>x.kind==='retailer-product'));
+});
+
+test('retailer with wrong card language or product edition is rejected',async()=>{
+  const page='<html><h1>Scarlet Violet Aurora Chorus Pokemon Center Booster Bundle</h1>'+
+    '<p>Includes 11 booster packs. Card language: Japanese.</p></html>';
+  const {result}=await offlineLookup({productName:name,productType:'bundle'},{
+    geminiResponse:aiResponse('Product listing '+retail,[retail]),
+    pages:{[retail]:page}
+  });
+  assert.equal(result.suggestedCount,null);
+  assert.equal(result.verifiedFields.boosters,false);
+});
+
+test('Gemini request only contains public name/type/language, never inventory or tokens',async()=>{
+  const saved=globalThis.fetch;
+  let body;
+  globalThis.fetch=async (url,options)=>{
+    body=JSON.parse(options.body);
+    assert.equal(options.headers['x-goog-api-key'],'unit-test-secret');
+    return new Response(JSON.stringify(aiResponse(official)),{
+      status:200,headers:{'Content-Type':'application/json'}
+    });
+  };
+  try {
+    const r=await discoverProductWithGemini(
+      {ENABLE_GOOGLE_SEARCH:'true',GEMINI_API_KEY:'unit-test-secret'},
+      'Unknown Japanese Booster Bundle', 'bundle', 'JP', allowOfficial,allowRetail
+    );
+    assert.equal(r.status,'grounded');
+    assert.equal(r.officialUrls[0],official);
+    assert.equal(body.generationConfig.maxOutputTokens,850);
+    assert.deepEqual(body.tools,[{googleSearch:{}}]);
+    assert.doesNotMatch(JSON.stringify(body),/unit-test-secret/);
+  } finally {globalThis.fetch=saved}
+});
