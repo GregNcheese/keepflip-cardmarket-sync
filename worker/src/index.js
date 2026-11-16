@@ -510,6 +510,46 @@ function sameRetailProduct(left, right) {
       a.origin === b.origin && canonical(a) === canonical(b);
   } catch { return false; }
 }
+// Shopify's documented public Ajax Product API: /products/{handle}.js.
+// Use it only after a storefront result AND the actual product page have
+// passed exact identity checks. This is not a product list or scraper feed.
+async function fetchLiveProductJson(sourceUrl, name, type, language) {
+  let url;
+  try {
+    const source = new URL(sourceUrl);
+    if (!['rarecards.nl', 'www.cardnation.nl'].includes(source.hostname) ||
+      source.protocol !== 'https:' || source.port ||
+      source.username || source.password) return { status:'invalid-host' };
+    const match = source.pathname.match(/^\/(?:[a-z]{2}\/)?products\/([a-z0-9-]{2,150})\/?$/i);
+    if (!match) return { status:'invalid-product-path' };
+    url = source.origin + '/products/' + match[1] + '.js';
+  } catch { return { status:'invalid-url' }; }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4500);
+  try {
+    const response = await fetch(url, {
+      signal:controller.signal, redirect:'manual',
+      headers:{ Accept:'application/json' },
+      cf:{ cacheTtl:1800 }
+    });
+    if (!response.ok || Number(response.headers.get('content-length') || 0)>260000 ||
+        !String(response.headers.get('content-type') || '').includes('json'))
+      return { status:'http-' + response.status };
+    const raw=await response.text();
+    if (raw.length > 260000) return { status:'oversize' };
+    const json=JSON.parse(raw);
+    const title=String(json?.title || '').slice(0,240);
+    if (!title || !matchesLiveProductTitle(name,title,type,language))
+      return { status:'different-product' };
+    const description=String(json?.description || '').slice(0,32000);
+    return {
+      status:'verified-title', text:htmlText(description),
+      title, url:sourceUrl
+    };
+  } catch { return { status:'unreachable' }; }
+  finally { clearTimeout(timer); }
+}
+
 async function fetchRetail(url, env, hops = 0) {
   const safe = safeRetailUrl(url, env);
   if (!safe) {
@@ -1467,9 +1507,22 @@ async function lookup(data, env) {
           ? matchLive : exactRetailTitleMatches(item.html, name, type);
         if (!item.html || !titleMatch) continue;
         const text = htmlText(scopedProductHtml(item.html));
-        const packs = countFromText(text, 'packs');
-        const cards = countFromText(text, 'cards');
-        const lang = productLanguageFromText(text);
+        const json = isLiveCandidate
+          ? await fetchLiveProductJson(item.url, name, type, language)
+          : { status:'not-live' };
+        if (isLiveCandidate) {
+          if (!out.diagnostics.productJsonFetch) out.diagnostics.productJsonFetch = [];
+          out.diagnostics.productJsonFetch.push({
+            url:item.url, status:json.status
+          });
+        }
+        // JSON description is the actual product body, unlike broad storefront
+        // HTML which may include unrelated items, popups, and recommendations.
+        const productText = json.status === 'verified-title' && json.text
+          ? json.text : text;
+        const packs = countFromText(productText, 'packs');
+        const cards = countFromText(productText, 'cards');
+        const lang = productLanguageFromText(productText);
         applyField(
           out,
           'boosters',
