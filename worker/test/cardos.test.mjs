@@ -193,3 +193,28 @@ test('Worker automatically falls back to existing sources when CardOS has no cre
     assert.equal(out.verifiedFields.cardsPerPack,true);
   }finally{globalThis.fetch=original}
 });
+
+
+test('Local CardOS TEST html preflight is allowed only in isolated test configuration, still needs Bearer',async()=>{
+  const localOrigin='null';
+  const make=()=>new Request(base+'/lookup',{
+    method:'OPTIONS',
+    headers:{Origin:localOrigin,'Access-Control-Request-Method':'POST',
+      'Access-Control-Request-Headers':'Authorization,Content-Type'}
+  });
+  const denied=await worker.fetch(make(),env);
+  assert.equal(denied.status,403);
+  const preview={...env,CARDOS_TEST_ALLOW_FILE_ORIGIN:'true'};
+  const allowed=await worker.fetch(make(),preview);
+  assert.equal(allowed.status,204);
+  assert.equal(allowed.headers.get('Access-Control-Allow-Origin'),'null');
+  const blocked=await worker.fetch(new Request(base+'/lookup',{
+    method:'POST',headers:{Origin:'null','Content-Type':'application/json'},
+    body:JSON.stringify({productName:'151 Booster Bundle',productType:'bundle'})
+  }),preview);
+  assert.equal(blocked.status,401);
+  const unsupported=await worker.fetch(make(),{
+    ...preview,DIRECT_WEB_DISCOVERY:'false'
+  });
+  assert.equal(unsupported.status,403);
+});
