@@ -1,3 +1,4 @@
+import { renderTestLab } from './testlab.js';
 import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfidence, explicitCardLanguage } from './autofill.js';
 import { matchingOfficialTitle, selectVerifiedProduct, scopedProductHtml, editionCompatible } from './product-identity.js';
 import { discoverProductWithGemini } from './gemini-discovery.js';
@@ -134,7 +135,10 @@ function reply(data, status = 200, origin = '') {
 function allowedOrigin(request, env) {
   const origin = request.headers.get('Origin') || '';
   const expected = String(env.APP_ORIGIN || '').trim();
-  return origin && origin === expected ? origin : '';
+  // Same-origin calls from the isolated Worker-hosted Testlab are allowed;
+  // the existing Bearer token remains required on /lookup.
+  const ownOrigin = new URL(request.url).origin;
+  return origin && (origin === expected || origin === ownOrigin) ? origin : '';
 }
 async function tokenMatches(given, expected) {
   if (
@@ -1815,6 +1819,20 @@ export default {
   async fetch(request, env) {
     const path = new URL(request.url).pathname;
     const origin = allowedOrigin(request, env);
+    if (request.method === 'GET' && path === '/testlab') {
+      return new Response(renderTestLab(), {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'X-Robots-Tag': 'noindex, nofollow',
+          'X-Content-Type-Options': 'nosniff',
+          'Referrer-Policy': 'no-referrer',
+          'X-Frame-Options': 'DENY',
+          'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+        }
+      });
+    }
     if (
       request.method === 'GET' &&
       (
