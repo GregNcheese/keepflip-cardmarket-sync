@@ -65,3 +65,32 @@ export function labelFieldConfidence(field, out) {
   if (out.provisionalFields?.[field]) return 'provisional';
   return 'missing';
 }
+
+/**
+ * Recognize ONLY explicitly described card language, never the language
+ * of the website, shopper location, URL domain, or set's listing.
+ * Conflicting language statements produce no auto-filled value.
+ */
+export function explicitCardLanguage(text) {
+  const source = String(text || '').slice(0, 160000);
+  const aliases = {
+    english: 'EN', engels: 'EN', '英語': 'EN', '영어': 'EN', '英语': 'EN',
+    japanese: 'JP', japans: 'JP', '日本語': 'JP', '일본어': 'JP', '日语': 'JP', '日語': 'JP',
+    korean: 'KR', koreaans: 'KR', '韓国語': 'KR', '한국어': 'KR', '韩语': 'KR', '韓語': 'KR',
+    'simplified chinese': 'ZH-CN', 'vereenvoudigd chinees': 'ZH-CN', '简体中文': 'ZH-CN', '簡體中文': 'ZH-CN',
+    'traditional chinese': 'ZH-TW', 'traditioneel chinees': 'ZH-TW', '繁体中文': 'ZH-TW', '繁體中文': 'ZH-TW',
+    german: 'DE', duits: 'DE', french: 'FR', frans: 'FR', italian: 'IT', italiaans: 'IT',
+    spanish: 'ES', spaans: 'ES', dutch: 'NL', nederlands: 'NL'
+  };
+  const languages = Object.keys(aliases).sort((a,b) => b.length - a.length).join('|');
+  const latin = new RegExp(
+    '(?:card language|language of (?:the )?cards|product language|cards? (?:are|printed) in|kaarttaal|taal)' +
+    '\\s*[:：–-]?\\s*(' + languages + ')(?=$|[\\s,.;:!\\)\\]]|<)',
+    'gi'
+  );
+  const asian = /(?:カード言語|言語|언어|카드 언어|卡牌语言|卡牌語言|语言|語言)\s*[:：]\s*(日本語|英語|韓国語|한국어|일본어|영어|日语|日語|韩语|韓語|简体中文|簡體中文|繁体中文|繁體中文)/g;
+  const codes = new Set();
+  for (const m of source.matchAll(latin)) codes.add(aliases[m[1].toLowerCase()]);
+  for (const m of source.matchAll(asian)) codes.add(aliases[m[1].toLowerCase()]);
+  return codes.size === 1 ? [...codes][0] : null;
+}
