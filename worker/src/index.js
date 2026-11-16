@@ -1,5 +1,7 @@
+import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfidence, explicitCardLanguage } from './autofill.js';
+
 /**
- * Keep & Flip – Productbronnen Worker 2.1.4 TEST
+ * Keep & Flip – Productbronnen Worker 2.1.6 AUTOFILL TEST
  *
  * GET /health
  * POST /lookup
@@ -19,7 +21,7 @@
  * Geen voorraadmutaties.
  * Geen onbewezen gegevens automatisch bevestigen.
  */
-const VERSION = '2.1.4';
+const VERSION = '2.1.6';
 const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 const MAX_BODY = 3500;
 const SET_LANGUAGES = ['en', 'ja', 'ko', 'zh-cn', 'zh-tw'];
@@ -272,7 +274,7 @@ function htmlText(html) {
     .replace(/\<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
     .replace(/\<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;| /gi, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&quot;/gi, '"')
     .replace(/&#(?:39|x27);|&apos;/gi, "'")
@@ -352,26 +354,13 @@ function countFromText(text, type) {
     }
   }
   const unique = [...new Set(numbers)];
-  return unique.length === 1 ? unique[0] : null;
+  if (unique.length > 1) return null;
+  return mergeCountEvidence(unique.length === 1 ? unique[0] : null, additionalCount(text, type === 'packs' ? 'packs' : 'cards'));
 }
 function productLanguageFromText(text) {
-  const match = String(text).match(
-    /\b(?:card language|language of (?:the )?cards|cards? (?:are|printed) in)\s*[:–-]?\s*(english|japanese|korean|simplified chinese|traditional chinese|german|french|italian|spanish|dutch)\b/i
-  );
-  const langs = {
-    english: 'EN',
-    japanese: 'JP',
-    korean: 'KR',
-    'simplified chinese': 'ZH-CN',
-    'traditional chinese': 'ZH-TW',
-    german: 'DE',
-    french: 'FR',
-    italian: 'IT',
-    spanish: 'ES',
-    dutch: 'NL'
-  };
-  return match ? langs[match[1].toLowerCase()] : null;
+  return explicitCardLanguage(text);
 }
+
 async function fetchOfficial(url, redirects = 0) {
   const controller = new AbortController();
   const timeout = setTimeout(
@@ -804,7 +793,8 @@ async function fromRegistry(
           !p ||
           p.verified !== true ||
           !officialUrl(p.sourceUrl) ||
-          p.productType !== type
+          p.productType !== type ||
+          (id && String(p.cardmarketProductId || '') !== String(id))
         ) return false;
         if (
           language &&
@@ -850,6 +840,7 @@ function initialResult(name, type) {
   return {
     suggestedCount: null,
     suggestedCardsPerPack: null,
+    suggestedProductType: null,
     suggestedSet: null,
     suggestedLanguage: null,
     sources: [],
@@ -865,16 +856,20 @@ function initialResult(name, type) {
       boosters: false,
       cardsPerPack: false,
       set: false,
-      language: false
+      language: false,
+      productType: false
     },
     provisionalFields: {
-      cardsPerPack: false
+      cardsPerPack: false,
+      productType: false
     },
     searchSuggestionsHtml: '',
     productName: name,
     productType: type,
     version: VERSION,
     diagnostics: {},
+    missingFields: [],
+    fieldConfidence: {},
     status: 'needs-review'
   };
 }
@@ -904,6 +899,8 @@ function applyField(
   sourceTitle,
   sourceKind
 ) {
+  if (key === 'boosters' && out.productType === 'pack') return;
+  if ((out.diagnostics.conflicts || []).some(c => c.field === key)) return;
   const mapping = {
     boosters: 'suggestedCount',
     cardsPerPack: 'suggestedCardsPerPack',
@@ -935,6 +932,10 @@ function applyField(
         rejected: value,
         source: method
       });
+      out[outputKey] = null;
+      out.verifiedFields[key] = false;
+      if (out.provisionalFields) out.provisionalFields[key] = false;
+      out.evidence[key === 'boosters' ? 'packCount' : key] = 'source-conflict';
     }
     return;
   }
@@ -959,7 +960,7 @@ function normalizedQuote(text) {
   return String(text || '')
     .normalize('NFKC')
     .toLowerCase()
-    .replace(/&nbsp;| /g, ' ')
+    .replace(/&nbsp;|&#160;/g, ' ')
     .replace(/[\s\p{P}\p{S}]+/gu, '');
 }
 function quoteIsOnPage(quote, pageText) {
@@ -1217,10 +1218,12 @@ async function lookup(data, env) {
     typeof data?.productName === 'string'
       ? data.productName.trim().slice(0, 150)
       : '';
-  const type =
+  const requestedType =
     typeof data?.productType === 'string'
       ? data.productType.toLowerCase().trim()
       : 'other';
+  const detectedType = inferProductType(name);
+  const type = requestedType === 'other' && detectedType ? detectedType : requestedType;
   const id = data?.cardmarketProductId ?? null;
   const language = languageCode(data?.language);
   if (
@@ -1240,6 +1243,19 @@ async function lookup(data, env) {
     };
   }
   const out = initialResult(name, type);
+  if (detectedType) {
+    out.suggestedProductType = detectedType;
+    out.provisionalFields.productType = true;
+    out.evidence.productType = 'unverified-product-name-hint';
+  }
+  if (detectedType && requestedType !== 'other' && requestedType !== detectedType) {
+    out.diagnostics.typeMismatch = { supplied: requestedType, detected: detectedType };
+    out.warning = 'Producttype in de naam wijkt af van het opgegeven type; controleer dit eerst.';
+    out.status = 'needs-review';
+    out.missingFields = ['productType'];
+    out.fieldConfidence = { productType: 'conflict' };
+    return out;
+  }
   const curated = CURATED.find(
     item =>
       item.type === type &&
@@ -1267,6 +1283,10 @@ async function lookup(data, env) {
       }
     : registry;
   if (record) {
+    out.verifiedFields.productType = true;
+    out.provisionalFields.productType = false;
+    out.suggestedProductType = type;
+    out.evidence.productType = record.method;
     applyField(
       out, 'boosters', record.packs,
       record.method, record.url,
@@ -1354,6 +1374,13 @@ async function lookup(data, env) {
     );
     const page = matched[0];
     if (page) {
+      const title = page.html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || '';
+      if (inferProductType(htmlText(title)) === type) {
+        out.verifiedFields.productType = true;
+        out.provisionalFields.productType = false;
+        out.suggestedProductType = type;
+        out.evidence.productType = 'verified-official-product-title';
+      }
       const text = htmlText(page.html);
       applyField(
         out,
@@ -1553,19 +1580,26 @@ async function lookup(data, env) {
       );
     }
   }
+  // A loose booster is one purchased product: not a package with a booster-count field.
+  const requiresBoosterCount = type !== 'pack';
+  const hasConflicts = (out.diagnostics.conflicts || []).length > 0;
   out.sourceVerified = !!(
-    out.verifiedFields.boosters ||
+    (requiresBoosterCount && out.verifiedFields.boosters) ||
     out.verifiedFields.cardsPerPack
   );
-  out.confidence = out.sourceVerified
+  out.fieldConfidence = Object.fromEntries(['boosters','cardsPerPack','set','language','productType'].map(field => [field, labelFieldConfidence(field, out)]));
+  out.confidence = hasConflicts ? 'conflict' : out.sourceVerified
     ? 'source-backed'
     : out.verifiedFields.set
       ? 'partial'
       : 'unknown';
   out.status =
-    out.verifiedFields.boosters &&
+    (!requiresBoosterCount || out.verifiedFields.boosters) &&
     out.verifiedFields.cardsPerPack &&
-    !(out.diagnostics.conflicts || []).length
+    out.verifiedFields.set &&
+    out.verifiedFields.language &&
+    out.verifiedFields.productType &&
+    !hasConflicts
       ? 'match'
       : (
           out.sourceVerified ||
@@ -1574,13 +1608,16 @@ async function lookup(data, env) {
         ? 'partial'
         : 'needs-review';
   out.missingFields = [
-    !out.suggestedCount && 'boosters',
+    requiresBoosterCount && !out.verifiedFields.boosters && 'boosters',
     !out.verifiedFields.cardsPerPack &&
       'cardsPerPack',
     !out.suggestedLanguage && 'language',
     !out.suggestedSet && 'set'
   ].filter(Boolean);
-  if (out.missingFields.length) {
+  if (hasConflicts) {
+    out.warning = 'Tegenstrijdige productbronnen: conflicterende velden zijn leeggemaakt. Handmatige controle vereist.';
+    out.status = 'needs-review';
+  } else if (out.missingFields.length) {
     out.warning =
       out.provisionalFields.cardsPerPack
         ? '10 kaarten is een voorlopig voorstel op basis van de officiële Amerikaanse boosterregel; bevestiging vereist.'

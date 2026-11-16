@@ -1,0 +1,18 @@
+{
+  // TEST-ONLY compatibility config for Cloudflare Workers Builds currently using
+  // repository root "/" despite Previews Base being configured as "/worker".
+  // IMPORTANT: do not merge this root config into main until build settings are reconciled.
+  // All secrets remain in Cloudflare Previews Base, never in GitHub.
+  "$schema": "./worker/node_modules/wrangler/config-schema.json",
+  "name": "late-smoke-2a21",
+  "main": "./worker/src/index.js",
+  "compatibility_date": "2026-11-16",
+  "workers_dev": true,
+  "keep_vars": true,
+  "previews": {
+    "vars": {
+      "APP_ORIGIN": "https://gregncheese.github.io",
+      "ENABLE_GOOGLE_SEARCH": "false"
+    }
+  }
+}

@@ -5,12 +5,12 @@ import worker from '../src/index.js';
 const base = 'https://late-smoke-2a21.chokorii.workers.dev';
 const env = { APP_ORIGIN: 'https://example.com', KEEPFLIP_ACCESS_TOKEN: 'unit-test-secret' };
 
-test('root and /health advertise version 2.1.4 without revealing secrets', async () => {
+test('root and /health advertise version 2.1.6 without revealing secrets', async () => {
   for (const path of ['/', '/health']) {
     const response = await worker.fetch(new Request(base + path), env);
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.equal(body.version, '2.1.4');
+    assert.equal(body.version, '2.1.6');
     assert.equal(body.status, 'online');
     assert.equal(body.accessConfigured, true);
     assert.doesNotMatch(JSON.stringify(body), /unit-test-secret/);
