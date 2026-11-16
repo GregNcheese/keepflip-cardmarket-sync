@@ -1,0 +1,42 @@
+{
+  "schema": "keepflip-official-card-photo-seeds-v1",
+  "description": "Public metadata links to the Japanese Pokemon TCG official site. Image bytes are never copied to or hosted on GitHub. Print variant and market price are not verified by this index.",
+  "cards": [
+    {
+      "id": "sm10-042",
+      "language": "ja",
+      "name": "Marshadow & Machamp GX",
+      "setCode": "SM10",
+      "setName": "Double Blaze",
+      "localNumber": "042",
+      "cardmarketId": 557397,
+      "sourceCardId": 36361,
+      "sourcePage": "https://www.pokemon-card.com/card-search/details.php/card/36361/regu/XY",
+      "imageUrl": "https://www.pokemon-card.com/assets/images/card_images/large/SM10/036361_P_MASHADOKAIRIKIGX.jpg"
+    },
+    {
+      "id": "sm11-054",
+      "language": "ja",
+      "name": "Mega Sableye & Tyranitar GX",
+      "setCode": "SM11",
+      "setName": "Miracle Twin",
+      "localNumber": "054",
+      "cardmarketId": 557016,
+      "sourceCardId": 36801,
+      "sourcePage": "https://www.pokemon-card.com/card-search/details.php/card/36801/regu/all",
+      "imageUrl": "https://www.pokemon-card.com/assets/images/card_images/large/SM11/036801_P_MEGAYAMIRAMIBANGIRASUGX.jpg"
+    },
+    {
+      "id": "cp6-015",
+      "language": "ja",
+      "name": "Ninetales",
+      "setCode": "CP6",
+      "setName": "Expansion Pack 20th Anniversary",
+      "localNumber": "015",
+      "cardmarketId": 562471,
+      "sourceCardId": 32221,
+      "sourcePage": "https://www.pokemon-card.com/card-search/details.php/card/32221/regu/XY",
+      "imageUrl": "https://www.pokemon-card.com/assets/images/card_images/large/CP6/032221_P_KYUUKON.jpg"
+    }
+  ]
+}
