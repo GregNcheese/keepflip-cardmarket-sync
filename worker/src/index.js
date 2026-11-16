@@ -1,3 +1,4 @@
+import { discoverLiveProductPages, matchesLiveProductTitle } from './live-product-search.js';
 import { renderTestLab } from './testlab.js';
 import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfidence, explicitCardLanguage } from './autofill.js';
 import { matchingOfficialTitle, selectVerifiedProduct, scopedProductHtml, editionCompatible } from './product-identity.js';
@@ -61,6 +62,8 @@ const RETAIL_DOMAINS = new Set([
   'www.pokeselect.nl',
   'cardmarket.com',
   'www.cardmarket.com',
+  'rarecards.nl',
+  'www.rarecards.nl',
   'tcgplayer.com',
   'www.tcgplayer.com'
 ]);
@@ -347,6 +350,18 @@ function countFromText(text, type) {
       ),
       /(?:1パック|1팩|每包|每包裝|每包内)\s*(?:に|당|含|包括)?\s*(\d{1,3})\s*(?:枚|장|张|張)/gi
     ];
+  if (type === 'packs') {
+    patterns.push(
+      /\b(?:number of|aantal)\s+(?:booster\s*)?packs?\s+per\s+(?:box|doos)\s*[:：–-]?\s*(\d{1,3})\b/gi,
+      /\b(?:number of|aantal)\s+boosters?\s+per\s+(?:box|doos)\s*[:：–-]?\s*(\d{1,3})\b/gi,
+      /\b(?:inhoud|contents?)\s*[:：]\s*(\d{1,3})\s+booster\s*packs?\s+per\s+box\b/gi
+    );
+  } else {
+    patterns.push(
+      /\b(?:number of|aantal)\s+(?:kaarten|cards?)\s+per\s+(?:booster\s*)?pack\s*[:：–-]?\s*(\d{1,3})\b/gi,
+      /\b(?:aantal|number of)\s+(?:kaarten|cards?)\s+per\s+booster\s*[:：–-]?\s*(\d{1,3})\b/gi
+    );
+  }
   const numbers = [];
   for (const pattern of patterns) {
     for (const match of String(text).matchAll(pattern)) {
@@ -1189,9 +1204,15 @@ async function lookup(data, env) {
   }
   // Search the public web and TCGdex concurrently where available.
   // This avoids making users wait for five set-catalog calls before Search.
-  const discoveryPromise = record ? null : discoverProductWithGemini(
-    env, name, type, language, officialUrl, u => safeRetailUrl(u, env)
-  );
+  const livePromise = record ? null :
+    discoverLiveProductPages(env, name, type, language);
+  // Direct source lookup is the default in the preview. Paid Google-grounding
+  // is NOT called when DIRECT_WEB_DISCOVERY is enabled.
+  const discoveryPromise = record ||
+    String(env.DIRECT_WEB_DISCOVERY || '').toLowerCase() === 'true'
+    ? null : discoverProductWithGemini(
+      env, name, type, language, officialUrl, u => safeRetailUrl(u, env)
+    );
   if (!out.suggestedSet) {
     const set = await findSet(name, language);
     if (set) {
@@ -1220,11 +1241,20 @@ async function lookup(data, env) {
   ];
   // Source discovery for unknown sealed products: one grounded Search query
   // per request at most. AI numbers are ignored; fetched pages prove fields.
-  const discovery = record ? {
-    status: 'skipped-existing-product-record',
+  const live = livePromise ? await livePromise : {
+    status: record ? 'skipped-existing-product-record' : 'disabled',
+    retailUrls: [], diagnostics: []
+  };
+  out.diagnostics.liveDiscovery = {
+    status: live.status,
+    matchedProducts: live.retailUrls.length,
+    providers: live.diagnostics
+  };
+  const discovery = discoveryPromise ? await discoveryPromise : {
+    status: record ? 'skipped-existing-product-record' : 'disabled-direct-search',
     groundingUsed: false, officialUrls: [], retailUrls: [],
     searchQueries: [], searchSuggestionsHtml: ''
-  } : await discoveryPromise;
+  };
   out.googleSearchEnabled = String(env.ENABLE_GOOGLE_SEARCH || '').toLowerCase() === 'true';
   out.groundingUsed = discovery.groundingUsed;
   out.geminiResponded = discovery.groundingUsed;
@@ -1385,6 +1415,7 @@ async function lookup(data, env) {
           [
             ...(seed?.urls || []),
             ...providedSecondary,
+            ...live.retailUrls,
             ...discovery.retailUrls
           ]
             .map(u => safeRetailUrl(u, env))
@@ -1410,13 +1441,15 @@ async function lookup(data, env) {
           )
         }));
       for (const item of checkedRetail) {
+        const isLiveCandidate = live.retailUrls.includes(item.url);
+        const matchLive = isLiveCandidate &&
+          [...String(item.html || '').matchAll(/<(?:h1|title)\b[^>]*>([\s\S]*?)<\/(?:h1|title)>/gi)]
+            .some(x => matchesLiveProductTitle(
+              name, htmlText(x[1]), type, language
+            ));
         if (
           !item.html ||
-          !exactRetailTitleMatches(
-            item.html,
-            name,
-            type
-          )
+          !(matchLive || exactRetailTitleMatches(item.html, name, type))
         ) continue;
         const text = htmlText(scopedProductHtml(item.html));
         const packs = countFromText(text, 'packs');
@@ -1855,6 +1888,7 @@ export default {
           !!env.KEEPFLIP_ACCESS_TOKEN,
         registryConfigured:
           !!registryUrl(env.KEEPFLIP_REGISTRY_URL),
+        liveSearchEnabled: String(env.DIRECT_WEB_DISCOVERY || '').toLowerCase() === 'true',
         googleSearchEnabled:
           String(env.ENABLE_GOOGLE_SEARCH || '')
             .toLowerCase() === 'true'
