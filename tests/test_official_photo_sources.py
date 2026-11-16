@@ -7,7 +7,7 @@ from verify_official_photo_sources import allowed_card,check_card,page_check,bui
 
 
 def fake_page(card):
-    return "<html><h1>公式カード</h1><p>"+card["setCode"]+" "+card["localNumber"]+" / 095</p></html>"
+    return "<html><h1>公式カード情報 日本語 日本語 日本語 テスト画像情報テスト</h1><p>"+card["setCode"]+" "+card["localNumber"]+" / 095</p><footer>カードゲーム トレーナーズ</footer></html>"
 
 
 class OfficialPhotosTests(unittest.TestCase):
