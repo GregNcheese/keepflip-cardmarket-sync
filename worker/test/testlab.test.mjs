@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Script } from 'node:vm';
 import worker from '../src/index.js';
 import { renderTestLab } from '../src/testlab.js';
 
@@ -49,4 +50,11 @@ test('Testlab does not bypass Bearer authentication for /lookup', async () => {
     KEEPFLIP_ACCESS_TOKEN: 'secret-only-for-test'
   });
   assert.equal(response.status, 401);
+});
+
+test('inline browser JavaScript compiles correctly', () => {
+  const html = renderTestLab();
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(script);
+  assert.doesNotThrow(() => new Script(script));
 });
