@@ -16,7 +16,7 @@ test('Testlab is served as a private-token-free standalone HTML page', async () 
   assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow');
   const html = await response.text();
   assert.equal(html, renderTestLab());
-  assert.match(html, /Gemini Testlab/);
+  assert.match(html, /Productbronnen Testlab/);
   assert.match(html, /autocomplete="off"/);
   assert.match(html, /Start één zoektest/);
   assert.ok(!html.includes('localStorage'));
