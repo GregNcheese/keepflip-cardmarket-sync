@@ -221,7 +221,9 @@ test('Japanese box and Korean pack counts do not become a card-per-pack guess',a
   assert.equal(result.productType,'box');
   assert.equal(result.suggestedCount,30);
   assert.equal(result.suggestedCardsPerPack,5);
-  assert.equal(result.suggestedLanguage,null);
+  assert.equal(result.suggestedLanguage,'JP');
+  assert.equal(result.verifiedFields.language,false);
+  assert.equal(result.provisionalFields.language,true);
   assert.equal(result.requiresConfirmation,true);
 });
 
