@@ -868,6 +868,8 @@ function initialResult(name, type) {
     productType: type,
     version: VERSION,
     diagnostics: {},
+    missingFields: [],
+    fieldConfidence: {},
     status: 'needs-review'
   };
 }
@@ -1250,6 +1252,8 @@ async function lookup(data, env) {
     out.diagnostics.typeMismatch = { supplied: requestedType, detected: detectedType };
     out.warning = 'Producttype in de naam wijkt af van het opgegeven type; controleer dit eerst.';
     out.status = 'needs-review';
+    out.missingFields = ['productType'];
+    out.fieldConfidence = { productType: 'conflict' };
     return out;
   }
   const curated = CURATED.find(
