@@ -1,0 +1,91 @@
+{
+  "schema": "keepflip-verified-sealed-starter-v1",
+  "description": "Limited smoke-test starter, not a complete product database; language unknown, no unverified IDs",
+  "products": [
+    {
+      "productName": "Scarlet & Violet—Paldean Fates Booster Bundle",
+      "aliases": [
+        "Scarlet Violet Paldean Fates Booster Bundle",
+        "Paldean Fates Booster Bundle"
+      ],
+      "productType": "bundle",
+      "packCount": 6,
+      "cardsPerPack": 10,
+      "expansionSet": "Paldean Fates",
+      "language": null,
+      "sourceUrl": "https://www.pokemon.com/us/pokemon-tcg/product-gallery/scarlet-violet-paldean-fates-booster-bundle",
+      "verified": true,
+      "sourceOfCardsPerPack": "https://support.pokemon.com/hc/en-us/articles/360001024394-What-types-of-Trading-Card-Game-products-are-available",
+      "verificationScope": "packs and game cards only; language deliberately not inferred",
+      "verifiedAt": "2026-11-16"
+    },
+    {
+      "productName": "Scarlet & Violet—Journey Together Booster Bundle",
+      "aliases": [
+        "Scarlet Violet Journey Together Booster Bundle",
+        "Journey Together Booster Bundle"
+      ],
+      "productType": "bundle",
+      "packCount": 6,
+      "cardsPerPack": 10,
+      "expansionSet": "Journey Together",
+      "language": null,
+      "sourceUrl": "https://www.pokemon.com/us/pokemon-tcg/product-gallery/scarlet-violet-journey-together-booster-bundle",
+      "verified": true,
+      "sourceOfCardsPerPack": "https://support.pokemon.com/hc/en-us/articles/360001024394-What-types-of-Trading-Card-Game-products-are-available",
+      "verificationScope": "packs and game cards only; language deliberately not inferred",
+      "verifiedAt": "2026-11-16"
+    },
+    {
+      "productName": "Scarlet & Violet—Stellar Crown Booster Bundle",
+      "aliases": [
+        "Scarlet Violet Stellar Crown Booster Bundle",
+        "Stellar Crown Booster Bundle"
+      ],
+      "productType": "bundle",
+      "packCount": 6,
+      "cardsPerPack": 10,
+      "expansionSet": "Stellar Crown",
+      "language": null,
+      "sourceUrl": "https://www.pokemon.com/us/pokemon-tcg/product-gallery/scarlet-violet-stellar-crown-booster-bundle",
+      "verified": true,
+      "sourceOfCardsPerPack": "https://support.pokemon.com/hc/en-us/articles/360001024394-What-types-of-Trading-Card-Game-products-are-available",
+      "verificationScope": "packs and game cards only; language deliberately not inferred",
+      "verifiedAt": "2026-11-16"
+    },
+    {
+      "productName": "Scarlet & Violet—Paldean Fates Elite Trainer Box",
+      "aliases": [
+        "Scarlet Violet Paldean Fates Elite Trainer Box",
+        "Paldean Fates ETB"
+      ],
+      "productType": "etb",
+      "packCount": 9,
+      "cardsPerPack": 10,
+      "expansionSet": "Paldean Fates",
+      "language": null,
+      "sourceUrl": "https://press.pokemon.com/en/MEDIA-ALERT-Pokemon-Trading-Card-Game-Scarlet-VioletPaldean-Fates-Expa",
+      "verified": true,
+      "sourceOfCardsPerPack": "https://support.pokemon.com/hc/en-us/articles/360001024394-What-types-of-Trading-Card-Game-products-are-available",
+      "verificationScope": "packs and game cards only; language deliberately not inferred",
+      "verifiedAt": "2026-11-16"
+    },
+    {
+      "productName": "Scarlet & Violet—Paldean Fates Pokémon Center Elite Trainer Box",
+      "aliases": [
+        "Scarlet Violet Paldean Fates Pokemon Center Elite Trainer Box",
+        "Paldean Fates Pokemon Center ETB"
+      ],
+      "productType": "etb",
+      "packCount": 11,
+      "cardsPerPack": 10,
+      "expansionSet": "Paldean Fates",
+      "language": null,
+      "sourceUrl": "https://press.pokemon.com/en/MEDIA-ALERT-Pokemon-Trading-Card-Game-Scarlet-VioletPaldean-Fates-Expa",
+      "verified": true,
+      "sourceOfCardsPerPack": "https://support.pokemon.com/hc/en-us/articles/360001024394-What-types-of-Trading-Card-Game-products-are-available",
+      "verificationScope": "packs and game cards only; language deliberately not inferred",
+      "verifiedAt": "2026-11-16"
+    }
+  ]
+}
