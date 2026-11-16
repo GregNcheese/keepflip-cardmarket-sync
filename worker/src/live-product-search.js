@@ -120,12 +120,17 @@ function safeShopProductUrl(candidate, shop) {
 export function searchQueries(name, type) {
   const important = coreTerms(name).slice(0, 7).join(' ');
   if (!important) return [];
+  // KR product queries MUST include the language. Generic "151 booster box"
+  // can return ten Japanese/English results and hide the correct Korean box.
+  const languageTerm = /\b(?:korean|kr)\b/.test(normal(name))
+    ? ' korean' : '';
   const term = type === 'etb' ? 'elite trainer box' :
     type === 'bundle' ? 'booster bundle' :
     type === 'pack' ? 'booster pack' :
     type === 'upc' ? 'ultra premium collection' : 'booster box';
   // One targeted query, and one broad query only if needed.
-  return [important + ' ' + term, important].filter((x,i,a)=>a.indexOf(x)===i);
+  return [important + languageTerm + ' ' + term, important + languageTerm]
+    .filter((x,i,a)=>a.indexOf(x)===i);
 }
 
 async function fetchSuggestions(shop, query) {
