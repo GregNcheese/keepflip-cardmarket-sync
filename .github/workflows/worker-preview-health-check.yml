@@ -2,7 +2,7 @@ name: Keep & Flip Worker Preview health check (NO DEPLOY)
 on:
   push:
     branches:
-      - test/cloudflare-worker-autofill-216-fresh-preview
+      - test/cloudflare-worker-autofill-217
     paths:
       - "worker/**"
       - "wrangler.jsonc"
@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Verify published preview config without secrets
         env:
-          PREVIEW_HEALTH_URL: https://test-cloudflare-worker-autofill-216-fresh-previ-late-smoke-2a21.chokorii.workers.dev/health
+          PREVIEW_HEALTH_URL: https://test-cloudflare-worker-autofill-217-late-smoke-2a21.chokorii.workers.dev/health
         run: |
           python3 - <<'PY'
           import json, os, time, urllib.request, urllib.error, sys
@@ -28,7 +28,7 @@ jobs:
                   with urllib.request.urlopen(req,timeout=12) as response:
                       data = json.load(response)
                   checks = {
-                      'version-2.1.6': data.get('version')=='2.1.6',
+                      'version-2.1.7': data.get('version')=='2.1.7',
                       'online': data.get('status')=='online',
                       'access-secret-configured': data.get('accessConfigured') is True,
                       'registry-url-configured': data.get('registryConfigured') is True,
