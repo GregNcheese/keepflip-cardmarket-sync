@@ -1506,6 +1506,13 @@ async function lookup(data, env) {
         const titleMatch = isLiveCandidate
           ? matchLive : exactRetailTitleMatches(item.html, name, type);
         if (!item.html || !titleMatch) continue;
+        // The fetched product page has independently confirmed packaging type.
+        if (isLiveCandidate && matchLive) {
+          out.suggestedProductType = type;
+          out.verifiedFields.productType = true;
+          out.provisionalFields.productType = false;
+          out.evidence.productType = 'verified-retailer-product-title';
+        }
         const text = htmlText(scopedProductHtml(item.html));
         const json = isLiveCandidate
           ? await fetchLiveProductJson(item.url, name, type, language)
