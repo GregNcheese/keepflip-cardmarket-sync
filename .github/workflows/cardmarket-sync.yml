@@ -34,14 +34,16 @@ jobs:
           key: cm-pokemon-catalog-${{ github.run_id }}
           restore-keys: |
             cm-pokemon-catalog-
+      - name: Test identity resolver offline
+        run: python -m unittest discover -s tests -v
       - name: Download, validate and prepare Cardmarket datasets
         env:
           FORCE_CATALOG: ${{ inputs.refresh_catalog }}
         run: |
           if [ "$FORCE_CATALOG" = "true" ]; then
-            python scripts/build_data.py --refresh-catalog
+            python scripts/build_and_index.py --refresh-catalog
           else
-            python scripts/build_data.py
+            python scripts/build_and_index.py
           fi
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
