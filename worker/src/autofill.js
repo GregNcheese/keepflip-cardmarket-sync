@@ -3,17 +3,24 @@
  * Never converts a name hint into independently verified product facts.
  */
 export function inferProductType(productName) {
-  const name = String(productName || '').toLowerCase().replace(/[‐‑–—]/g, '-').replace(/\s+/g, ' ');
+  const name = String(productName || '').toLowerCase()
+    .replace(/[‐‑‒–—]/g, '-').replace(/\s+/g, ' ').trim();
+  // Cases and blisters may contain multiple independently packaged products.
+  // They must not be mistaken for a single booster box / booster pack.
+  if (/\b(?:booster (?:box|display) case|booster case|display case|case of (?:booster )?boxes|3[- ]pack blister|three[- ]pack blister)\b/.test(name)) return null;
   if (/\b(?:ultra[- ]premium collection|ultra[- ]premium box|upc)\b/.test(name)) return 'upc';
-  if (/\b(?:elite trainer box|etb)\b/.test(name)) return 'etb';
-  if (/\b(?:booster bundle|boosterbundel|booster  ?bundel)\b/.test(name)) return 'bundle';
-  if (/\b(?:booster (?:display )?box|booster display|display box)\b/.test(name)) return 'box';
-  // A three-pack blister and a collection box are NOT single booster packs.
+  if (/\b(?:elite[- ]trainer[- ]box|elite trainer box|elite trainerbox|etb)\b/.test(name)) return 'etb';
+  if (/\b(?:booster bundle|boosterbundel|booster\s*bundel)\b/.test(name)) return 'bundle';
+  if (/\b(?:booster (?:display )?box|booster display|boosterdisplay|display box|expansion pack box|high class pack box)\b/.test(name)) return 'box';
+  // Japanese / Korean / Chinese sealed packaging labels.
+  if (/(?:拡張パック|強化拡張パック|ハイクラスパック)[\s\S]{0,40}(?:box|ボックス|箱)/i.test(name) ||
+      /(?:확장팩|부스터팩)[\s\S]{0,40}(?:박스|box)/i.test(name) ||
+      /(?:补充包|補充包)[\s\S]{0,40}(?:盒|box|整盒)/i.test(name)) return 'box';
   if (/\b(?:blister|collection box|premium collection|booster box|booster bundle|three[- ]pack|3[- ]pack)\b/.test(name)) return null;
-  if (/\b(?:sleeved booster(?: pack)?|single booster(?: pack)?|loose booster(?: pack)?|booster pack)\b/.test(name)) return 'pack';
+  if (/\b(?:sleeved booster(?: pack)?|single booster(?: pack)?|loose booster(?: pack)?|booster pack|expansion pack)\b/.test(name)) return 'pack';
+  if (/(?:拡張パック|強化拡張パック|ハイクラスパック|확장팩|부스터팩|补充包|補充包)/i.test(name)) return 'pack';
   return null;
 }
-
 const NUMBER_WORDS = Object.freeze({
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
   seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11,

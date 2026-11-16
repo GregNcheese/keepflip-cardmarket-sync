@@ -4,6 +4,7 @@ on:
     branches:
       - test/cloudflare-worker-214-source
       - test/cloudflare-worker-autofill-216
+      - test/cloudflare-worker-autofill-217
     paths:
       - "worker/**"
       - ".github/workflows/cloudflare-worker-source-test.yml"

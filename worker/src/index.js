@@ -1,7 +1,9 @@
 import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfidence, explicitCardLanguage } from './autofill.js';
+import { matchingOfficialTitle, selectVerifiedProduct, scopedProductHtml } from './product-identity.js';
+import { extractNameHints } from './name-hints.js';
 
 /**
- * Keep & Flip – Productbronnen Worker 2.1.6 AUTOFILL TEST
+ * Keep & Flip – Productbronnen Worker 2.1.7 AUTOFILL TEST
  *
  * GET /health
  * POST /lookup
@@ -21,7 +23,7 @@ import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfid
  * Geen voorraadmutaties.
  * Geen onbewezen gegevens automatisch bevestigen.
  */
-const VERSION = '2.1.6';
+const VERSION = '2.1.7';
 const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 const MAX_BODY = 3500;
 const SET_LANGUAGES = ['en', 'ja', 'ko', 'zh-cn', 'zh-tw'];
@@ -284,16 +286,10 @@ function htmlText(html) {
     .trim();
 }
 function titleMatches(html, name) {
-  const title =
-    html.match(/\<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ||
-    html.match(/\<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ||
-    '';
-  const headingWords = new Set(
-    norm(htmlText(title)).split(' ')
-  );
-  const wanted = norm(name).split(' ').filter(Boolean);
-  return wanted.length >= 2 &&
-    wanted.every(word => headingWords.has(word));
+  const title = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]
+    || html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1]
+    || '';
+  return matchingOfficialTitle(htmlText(title), name, norm, inferProductType);
 }
 const WORDS = {
   one: 1, two: 2, three: 3, four: 4,
@@ -756,7 +752,8 @@ async function fromRegistry(
   name,
   type,
   id,
-  language
+  language,
+  sourceUrl
 ) {
   const url = registryUrl(
     env.KEEPFLIP_REGISTRY_URL
@@ -786,50 +783,25 @@ async function fromRegistry(
       ? parsed
       : parsed.products;
     if (!Array.isArray(products)) return null;
-    const found = products
-      .slice(0, 8000)
-      .find(p => {
-        if (
-          !p ||
-          p.verified !== true ||
-          !officialUrl(p.sourceUrl) ||
-          p.productType !== type ||
-          (id && String(p.cardmarketProductId || '') !== String(id))
-        ) return false;
-        if (
-          language &&
-          p.language &&
-          languageCode(p.language) !== language
-        ) return false;
-        if (
-          id &&
-          p.cardmarketProductId &&
-          String(id) !== String(p.cardmarketProductId)
-        ) return false;
-        return [
-          p.productName,
-          ...(
-            Array.isArray(p.aliases)
-              ? p.aliases
-              : []
-          )
-        ].some(
-          alias => norm(alias) === norm(name)
-        );
-      });
-    return found
-      ? {
-          packs: valueNumber(found.packCount),
-          cards: valueNumber(found.cardsPerPack),
-          set:
-            typeof found.expansionSet === 'string'
-              ? found.expansionSet
-              : null,
-          language: languageCode(found.language),
-          url: officialUrl(found.sourceUrl),
-          method: 'verified-registry'
-        }
-      : null;
+    const selected = selectVerifiedProduct(products, {
+      name, type, id, language, sourceUrl
+    }, norm, officialUrl, languageCode);
+    if (selected.status !== 'exact') {
+      return { status: selected.status, candidates: selected.candidates, record: null };
+    }
+    const found = selected.record;
+    return {
+      status: 'exact',
+      candidates: [],
+      record: {
+        packs: valueNumber(found.packCount),
+        cards: valueNumber(found.cardsPerPack),
+        set: typeof found.expansionSet === 'string' ? found.expansionSet : null,
+        language: languageCode(found.language),
+        url: officialUrl(found.sourceUrl),
+        method: 'verified-registry'
+      }
+    };
   } catch {
     return null;
   } finally {
@@ -861,7 +833,9 @@ function initialResult(name, type) {
     },
     provisionalFields: {
       cardsPerPack: false,
-      productType: false
+      productType: false,
+      boosters: false,
+      language: false
     },
     searchSuggestionsHtml: '',
     productName: name,
@@ -1270,8 +1244,13 @@ async function lookup(data, env) {
         name,
         type,
         id,
-        language
+        language,
+        data?.sourceUrl
       );
+  if (registry?.status === 'ambiguous') {
+    out.diagnostics.registryStatus = 'ambiguous';
+    out.diagnostics.registryCandidates = registry.candidates;
+  }
   const record = curated
     ? {
         packs: curated.packs,
@@ -1281,7 +1260,7 @@ async function lookup(data, env) {
         url: curated.url,
         method: 'curated-record'
       }
-    : registry;
+    : registry?.record;
   if (record) {
     out.verifiedFields.productType = true;
     out.provisionalFields.productType = false;
@@ -1373,21 +1352,21 @@ async function lookup(data, env) {
       p => p.html && titleMatches(p.html, name)
     );
     const page = matched[0];
-    if (page) {
-      const title = page.html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || '';
+    for (const productPage of matched) {
+      const title = productPage.html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || '';
       if (inferProductType(htmlText(title)) === type) {
         out.verifiedFields.productType = true;
         out.provisionalFields.productType = false;
         out.suggestedProductType = type;
         out.evidence.productType = 'verified-official-product-title';
       }
-      const text = htmlText(page.html);
+      const text = htmlText(scopedProductHtml(productPage.html));
       applyField(
         out,
         'boosters',
         countFromText(text, 'packs'),
         'official-page-direct',
-        page.url,
+        productPage.url,
         'Officiële productpagina',
         'official-product'
       );
@@ -1396,7 +1375,7 @@ async function lookup(data, env) {
         'cardsPerPack',
         countFromText(text, 'cards'),
         'official-page-direct',
-        page.url,
+        productPage.url,
         'Officiële productpagina',
         'official-product'
       );
@@ -1405,7 +1384,7 @@ async function lookup(data, env) {
         'language',
         productLanguageFromText(text),
         'official-page-direct',
-        page.url,
+        productPage.url,
         'Officiële productpagina',
         'official-product'
       );
@@ -1530,7 +1509,7 @@ async function lookup(data, env) {
             type
           )
         ) continue;
-        const text = htmlText(item.html);
+        const text = htmlText(scopedProductHtml(item.html));
         const packs = countFromText(text, 'packs');
         const cards = countFromText(text, 'cards');
         const lang = productLanguageFromText(text);
@@ -1580,15 +1559,60 @@ async function lookup(data, env) {
       );
     }
   }
+  // Name counts help users enter missing fields but are NEVER source verified.
+  const hints = extractNameHints(name);
+  const sourceConflict = key => (out.diagnostics.conflicts || []).some(c => c.field === key);
+  const hintConflicts = [];
+  if (hints.boosters && type !== 'pack' && type !== 'other') {
+    if (out.verifiedFields.boosters && hints.boosters !== out.suggestedCount)
+      hintConflicts.push({field: 'boosters', fromName: hints.boosters, fromSource: out.suggestedCount});
+    else if (!out.verifiedFields.boosters && !sourceConflict('boosters') && !out.suggestedCount) {
+      out.suggestedCount = hints.boosters;
+      out.provisionalFields.boosters = true;
+      out.evidence.packCount = 'product-name-hint-unverified';
+    }
+  }
+  if (hints.cardsPerPack) {
+    if (out.verifiedFields.cardsPerPack && hints.cardsPerPack !== out.suggestedCardsPerPack)
+      hintConflicts.push({field: 'cardsPerPack', fromName: hints.cardsPerPack, fromSource: out.suggestedCardsPerPack});
+    else if (!out.verifiedFields.cardsPerPack && !sourceConflict('cardsPerPack')) {
+      out.suggestedCardsPerPack = hints.cardsPerPack;
+      out.provisionalFields.cardsPerPack = true;
+      out.evidence.cardsPerPack = 'product-name-hint-unverified';
+    }
+  }
+  if (hints.language) {
+    if (language && hints.language !== language) {
+      hintConflicts.push({field: 'language', fromName: hints.language, fromInput: language});
+    } else if (out.verifiedFields.language && hints.language !== out.suggestedLanguage) {
+      hintConflicts.push({field: 'language', fromName: hints.language, fromSource: out.suggestedLanguage});
+    } else if (!out.verifiedFields.language && !sourceConflict('language') && !out.suggestedLanguage) {
+      out.suggestedLanguage = hints.language;
+      out.provisionalFields.language = true;
+      out.evidence.language = 'product-name-hint-unverified';
+    }
+  }
+  if (hintConflicts.length) out.diagnostics.nameHintConflicts = hintConflicts;
+  if (out.provisionalFields.boosters || out.provisionalFields.language ||
+      out.evidence.cardsPerPack === 'product-name-hint-unverified') {
+    out.diagnostics.nameHints = {
+      boosters: out.provisionalFields.boosters ? hints.boosters : null,
+      cardsPerPack: out.evidence.cardsPerPack === 'product-name-hint-unverified' ? hints.cardsPerPack : null,
+      language: out.provisionalFields.language ? hints.language : null
+    };
+  }
+
   // A loose booster is one purchased product: not a package with a booster-count field.
   const requiresBoosterCount = type !== 'pack';
   const hasConflicts = (out.diagnostics.conflicts || []).length > 0;
+  const ambiguousRegistry = out.diagnostics.registryStatus === 'ambiguous';
+  const hasNameHintConflicts = hintConflicts.length > 0;
   out.sourceVerified = !!(
     (requiresBoosterCount && out.verifiedFields.boosters) ||
     out.verifiedFields.cardsPerPack
   );
   out.fieldConfidence = Object.fromEntries(['boosters','cardsPerPack','set','language','productType'].map(field => [field, labelFieldConfidence(field, out)]));
-  out.confidence = hasConflicts ? 'conflict' : out.sourceVerified
+  out.confidence = hasConflicts ? 'conflict' : ambiguousRegistry ? 'partial' : out.sourceVerified
     ? 'source-backed'
     : out.verifiedFields.set
       ? 'partial'
@@ -1599,7 +1623,9 @@ async function lookup(data, env) {
     out.verifiedFields.set &&
     out.verifiedFields.language &&
     out.verifiedFields.productType &&
-    !hasConflicts
+    !hasConflicts &&
+    !ambiguousRegistry &&
+    !hasNameHintConflicts
       ? 'match'
       : (
           out.sourceVerified ||
@@ -1611,17 +1637,26 @@ async function lookup(data, env) {
     requiresBoosterCount && !out.verifiedFields.boosters && 'boosters',
     !out.verifiedFields.cardsPerPack &&
       'cardsPerPack',
-    !out.suggestedLanguage && 'language',
+    !out.verifiedFields.language && 'language',
     !out.suggestedSet && 'set'
   ].filter(Boolean);
   if (hasConflicts) {
     out.warning = 'Tegenstrijdige productbronnen: conflicterende velden zijn leeggemaakt. Handmatige controle vereist.';
     out.status = 'needs-review';
+  } else if (ambiguousRegistry) {
+    out.warning = 'Meerdere uitvoeringen komen overeen met de opgegeven naam. Kies de exacte uitvoering; autofill is niet bevestigd.';
+    out.status = 'needs-review';
+  } else if (hasNameHintConflicts) {
+    out.warning = 'De productnaam wijkt af van de bevestigde bron of ingevoerde taal. Controleer de uitvoering.';
+    out.status = 'needs-review';
   } else if (out.missingFields.length) {
     out.warning =
-      out.provisionalFields.cardsPerPack
-        ? '10 kaarten is een voorlopig voorstel op basis van de officiële Amerikaanse boosterregel; bevestiging vereist.'
-        : 'Niet alle velden zijn exact bewezen; ontbrekende waarden blijven leeg.';
+      out.provisionalFields.boosters || out.provisionalFields.language ||
+      out.evidence.cardsPerPack === 'product-name-hint-unverified'
+        ? 'Productnaam bevat voorlopige autofillvoorstellen. Controleer aantal, taal en uitvoering.'
+        : out.provisionalFields.cardsPerPack
+          ? '10 kaarten is een voorlopig voorstel op basis van de officiële Amerikaanse boosterregel; bevestiging vereist.'
+          : 'Niet alle velden zijn exact bewezen; ontbrekende waarden blijven leeg.';
   }
   return out;
 }
