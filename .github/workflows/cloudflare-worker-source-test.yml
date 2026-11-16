@@ -21,8 +21,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install Worker build dependencies (GitHub only)
+        run: npm --prefix worker install --no-audit --no-fund
       - name: Check JavaScript syntax
         run: npm --prefix worker run check
       - name: Run offline smoke tests
         run: npm --prefix worker test
+      - name: Compile Cloudflare Worker without deployment
+        run: npm --prefix worker run check:cloudflare
 # No Cloudflare API token, production deployment, or secrets involved.
