@@ -1,4 +1,4 @@
-name: Keep & Flip Worker 2.1.4 — GitHub tests (NO DEPLOY)
+name: Keep & Flip Worker — offline tests (NO DEPLOY)
 on:
   push:
     branches:
