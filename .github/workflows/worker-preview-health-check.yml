@@ -37,6 +37,7 @@ jobs:
                   }
                   print('Preview health:', {k: bool(v) for k,v in checks.items()})
                   print('Gemini secret configured:', bool(data.get('geminiConfigured')))  # no secret value
+                  print('CardOS secret configured:', bool(data.get('cardosConfigured')))  # boolean only, no secret
                   if all(checks.values()):
                       print('Preview config OK (no sensitive values requested or logged)')
                       sys.exit(0)
