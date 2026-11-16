@@ -161,3 +161,37 @@ test('Shopify text/javascript product endpoint verifies fields missing from HTML
     assert.equal(out.diagnostics.productJsonFetch[0].status,'verified-title');
   } finally{ globalThis.fetch=saved; }
 });
+
+
+test('direct live mode does not silently use the old manually curated product records',async()=>{
+  const original=globalThis.fetch;
+  globalThis.fetch=async input=>{
+    const url=String(input);
+    if(url.includes('api.tcgdex.net')) return new Response('[]',{
+      headers:{'Content-Type':'application/json'}
+    });
+    if(url.includes('search/suggest.json'))return fakeShopify([]);
+    return new Response('Not found',{status:404});
+  };
+  try {
+    const response=await worker.fetch(new Request(base+'/lookup',{
+      method:'POST',
+      headers:{Authorization:'Bearer test-token',Origin:base,
+        'Content-Type':'application/json'},
+      body:JSON.stringify({productName:'Delta Reign Booster Bundle',productType:'bundle'})
+    }),{
+      KEEPFLIP_ACCESS_TOKEN:'test-token',
+      APP_ORIGIN:'https://gregncheese.github.io',
+      KEEPFLIP_REGISTRY_URL:'https://raw.githubusercontent.com/x/y/old-hardcoded-registry.json',
+      DIRECT_WEB_DISCOVERY:'true',
+      ENABLE_GOOGLE_SEARCH:'false'
+    });
+    const out=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(out.verifiedFields.boosters,false);
+    assert.equal(out.verifiedFields.cardsPerPack,false);
+    assert.equal(out.sourceVerified,false);
+    assert.equal(out.sources.some(s=>s.kind==='product-reference'),false);
+    assert.equal(out.diagnostics.liveDiscovery.status,'no-exact-online-match');
+  }finally{globalThis.fetch=original;}
+});
