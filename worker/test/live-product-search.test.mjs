@@ -255,8 +255,12 @@ test('Taiwan traditional Chinese contents verify from matching Shopify JSON even
 test('Korean 151 search includes printing language and accepts the correct online source', async()=>{
   const input='Pokemon Card 151 Korean Booster Box';
   assert.deepEqual(searchQueries(input,'box'), ['151 korean booster box','151 korean']);
+  assert.deepEqual(searchQueries('Pokemon Card 151 Booster Box','box','KR'),
+    ['151 korean booster box','151 korean']);
   assert.equal(matchesLiveProductTitle(input,'151 Booster Box - Korean Pokémon TCG','box','KR'),true);
   assert.equal(matchesLiveProductTitle(input,'151 Booster Box - Japanese Pokémon TCG','box','KR'),false);
+  assert.equal(matchesLiveProductTitle('Pokemon Card 151 Japanese Booster Box',
+    'Pokemon Card 151 Japanese Booster Box (1 Sealed Case)','box','JP'),false);
   const saved=globalThis.fetch,calls=[];
   globalThis.fetch=async input=>{
     const url=String(input);calls.push(url);
