@@ -107,7 +107,8 @@ const QUESTIONS=[
 const WAIT=ms=>new Promise(r=>setTimeout(r,ms));
 const slug=s=>String(s||'').trim().toLowerCase().replace(/[‐‑‒–—]/g,' ').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ');
 const key=({name,type,language})=>[slug(name),type,language].join('|');
-const langFromTitle=s=>/\b(?:JP|Japanese|JPN)\b/i.test(s)?'JP':
+const langFromTitle=s=>/\b(?:TW|Traditional Chinese|ZH-TW)\b/i.test(s)?'ZH-TW':
+  /\b(?:JP|Japanese|JPN)\b/i.test(s)?'JP':
   /\b(?:KOR|KR|Korean)\b/i.test(s)?'KR':
   /\b(?:CN|Chinese|ZH-CN|Simplified)\b/i.test(s)?'ZH-CN':
   /\b(?:TW|Traditional Chinese|ZH-TW)\b/i.test(s)?'ZH-TW':
@@ -147,6 +148,7 @@ for(const term of SEARCHES){
   for(let i=0;i<responses.length;i++){
     if(responses[i].status!=='ok')harvestFailures.push({source:STORES[i].name,term,status:responses[i].status});
     for(const row of responses[i].results){
+      if (!/pok[eé]mon/i.test(row.name)) continue; // Test Pokémon only
       const type=typeFromTitle(row.name);
       if(!type)continue;
       // Skip bundle-case, pack blister, and multi-product lots.
@@ -155,7 +157,7 @@ for(const term of SEARCHES){
       samples.push({name:row.name,type,language,group:'live store sample',origin:row.source});
     }
   }
-  await WAIT(130);
+  await WAIT(650); // Pace harvesting of public storefront results
 }
 // Select diverse real catalog titles, instead of keeping only recent EN boxes.
 const sampled=[...new Map(samples.map(x=>[key(x),x])).values()];
@@ -250,10 +252,10 @@ async function workerLoop(){
       source:r.sourceUrls?.[0]||null,
       issue:r.status==='audit-error'?r.error:r.conflicts?.length?'source-conflict':r.found&&!r.full?'missing-proof':!r.found?'not-found':null
     }));
-    await WAIT(300);
+    await WAIT(2500); // Respect per-store request limits
   }
 }
-await Promise.all([workerLoop(),workerLoop()]);
+await workerLoop(); // Sequential: avoid short-lived 429 from storefronts
 const count=(rows,p)=>rows.filter(p).length;
 const grouped=(field)=>{
   const map={};
@@ -276,8 +278,9 @@ const summary={
   verifiedCardLanguage:count(result,x=>x.verified?.language),
   verifiedSet:count(result,x=>x.verified?.set),
   conflicts:count(result,x=>x.conflicts?.length),
+  rateLimited:count(result,x=>x.providerStatus?.some(p=>String(p.status).includes('429')) || x.pages?.some(p=>Number(p.status)===429) || x.productJson?.some(p=>String(p.status).includes('429'))),
   errors:count(result,x=>x.status==='audit-error'),
-  byLanguage:grouped('language'),byType:grouped('type'),byOrigin:grouped('origin'),
+  byLanguage:grouped('language'),byType:grouped('type'),byOrigin:grouped('origin'),byGroup:grouped('group'),
   missing:result.filter(x=>!x.full).length,
   note:'Findability and verified proof are different; no pack-count registry or Gemini queries used.'
 };
