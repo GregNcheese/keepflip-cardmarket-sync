@@ -1528,19 +1528,10 @@ async function lookup(data, env) {
             .some(x => matchesLiveProductTitle(
               name, htmlText(x[1]), type, language
             ));
-        // Never downgrade strict live matching to a looser legacy matcher.
-        const titleMatch = isLiveCandidate
-          ? matchLive : exactRetailTitleMatches(item.html, name, type);
-        if (!item.html || !titleMatch) continue;
-        // The fetched product page has independently confirmed packaging type.
-        if (isLiveCandidate && matchLive) {
-          out.suggestedProductType = type;
-          out.verifiedFields.productType = true;
-          out.provisionalFields.productType = false;
-          out.evidence.productType = 'verified-retailer-product-title';
-        }
-        const text = htmlText(scopedProductHtml(item.html));
-        const json = isLiveCandidate
+        // Shopify page HTML can render a shortened or localized heading.
+        // Read its exact product JSON only after the Shopify search and product
+        // path were approved; independent JSON title MUST match requested product.
+        const json = isLiveCandidate && item.html
           ? await fetchLiveProductJson(item.url, name, type, language)
           : { status:'not-live' };
         if (isLiveCandidate) {
@@ -1549,6 +1540,31 @@ async function lookup(data, env) {
             url:item.url, status:json.status
           });
         }
+        // Do not accept a loose legacy match if a strict live candidate fails.
+        const titleMatch = isLiveCandidate
+          ? (matchLive || json.status === 'verified-title')
+          : exactRetailTitleMatches(item.html, name, type);
+        if (!item.html || !titleMatch) continue;
+        const diagnostic = out.diagnostics.secondaryFetch?.find(x => x.url === item.url);
+        if (diagnostic) {
+          diagnostic.titleMatch = true;
+          diagnostic.titleEvidence = matchLive
+            ? 'live-html-title'
+            : json.status === 'verified-title'
+              ? 'independent-shopify-json-title'
+              : 'legacy-title';
+        }
+        // The product type is verified either by the strict live HTML title
+        // or by independently fetched exact Shopify product JSON.
+        if (isLiveCandidate) {
+          out.suggestedProductType = type;
+          out.verifiedFields.productType = true;
+          out.provisionalFields.productType = false;
+          out.evidence.productType = matchLive
+            ? 'verified-retailer-product-title'
+            : 'verified-shopify-product-json-title';
+        }
+        const text = htmlText(scopedProductHtml(item.html));
         // JSON description is the actual product body, unlike broad storefront
         // HTML which may include unrelated items, popups, and recommendations.
         const productText = json.status === 'verified-title' && json.text
