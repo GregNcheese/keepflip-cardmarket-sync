@@ -36,8 +36,28 @@ for(const [name,type,language] of cases){
     live:body.diagnostics?.liveDiscovery,
     retail:body.diagnostics?.secondaryFetch,
     conflicts:body.diagnostics?.conflicts,
+    productJsonFetch:body.diagnostics?.productJsonFetch,
     verifiedSourceUrls:(body.sources||[]).filter(s=>s.kind==='retailer-product').map(s=>s.url)
   }));
 }
 console.log('Actual external-source backed lookups:',matches+'/'+cases.length);
 if (matches===0) process.exitCode=1;
+
+for(const handle of ['pokemon-jp-151-booster-box','pokemon-cn-gem-pack-booster-box']){
+  const url='https://rarecards.nl/products/'+handle+'.js';
+  try{
+    const response=await fetch(url,{headers:{Accept:'application/json'}});
+    const type=response.headers.get('content-type');
+    const text=await response.text();
+    let product={};
+    try{product=JSON.parse(text);}catch{}
+    const desc=String(product?.description || '');
+    const textOnly=desc.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+    console.log(JSON.stringify({
+      publicShopifyProduct:handle,status:response.status,contentType:type,
+      title:product.title||null,descriptionLength:desc.length,
+      hasCountWord:/\b(aantal|number|kaarten|cards|packs|box)\b/i.test(textOnly),
+      descriptionStart:textOnly.slice(0,150)
+    }));
+  }catch(e){console.log(JSON.stringify({publicShopifyProduct:handle,error:'network'}));}
+}
