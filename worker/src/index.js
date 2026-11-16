@@ -1,4 +1,4 @@
-import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfidence } from './autofill.js';
+import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfidence, explicitCardLanguage } from './autofill.js';
 
 /**
  * Keep & Flip – Productbronnen Worker 2.1.6 AUTOFILL TEST
@@ -358,23 +358,9 @@ function countFromText(text, type) {
   return mergeCountEvidence(unique.length === 1 ? unique[0] : null, additionalCount(text, type === 'packs' ? 'packs' : 'cards'));
 }
 function productLanguageFromText(text) {
-  const match = String(text).match(
-    /\b(?:card language|language of (?:the )?cards|cards? (?:are|printed) in)\s*[:–-]?\s*(english|japanese|korean|simplified chinese|traditional chinese|german|french|italian|spanish|dutch)\b/i
-  );
-  const langs = {
-    english: 'EN',
-    japanese: 'JP',
-    korean: 'KR',
-    'simplified chinese': 'ZH-CN',
-    'traditional chinese': 'ZH-TW',
-    german: 'DE',
-    french: 'FR',
-    italian: 'IT',
-    spanish: 'ES',
-    dutch: 'NL'
-  };
-  return match ? langs[match[1].toLowerCase()] : null;
+  return explicitCardLanguage(text);
 }
+
 async function fetchOfficial(url, redirects = 0) {
   const controller = new AbortController();
   const timeout = setTimeout(
@@ -1293,6 +1279,10 @@ async function lookup(data, env) {
       }
     : registry;
   if (record) {
+    out.verifiedFields.productType = true;
+    out.provisionalFields.productType = false;
+    out.suggestedProductType = type;
+    out.evidence.productType = record.method;
     applyField(
       out, 'boosters', record.packs,
       record.method, record.url,
@@ -1380,6 +1370,13 @@ async function lookup(data, env) {
     );
     const page = matched[0];
     if (page) {
+      const title = page.html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || '';
+      if (inferProductType(htmlText(title)) === type) {
+        out.verifiedFields.productType = true;
+        out.provisionalFields.productType = false;
+        out.suggestedProductType = type;
+        out.evidence.productType = 'verified-official-product-title';
+      }
       const text = htmlText(page.html);
       applyField(
         out,
@@ -1596,6 +1593,8 @@ async function lookup(data, env) {
     (!requiresBoosterCount || out.verifiedFields.boosters) &&
     out.verifiedFields.cardsPerPack &&
     out.verifiedFields.set &&
+    out.verifiedFields.language &&
+    out.verifiedFields.productType &&
     !hasConflicts
       ? 'match'
       : (
