@@ -356,20 +356,27 @@ function countFromText(text, type) {
       /\b(?:number of|aantal)\s+(?:booster\s*)?packs?\s+per\s+(?:box|doos)\s*[:：–-]?\s*(\d{1,3})\b/gi,
       /\b(?:number of|aantal)\s+boosters?\s+per\s+(?:box|doos)\s*[:：–-]?\s*(\d{1,3})\b/gi,
       /\b(?:inhoud|contents?)\s*[:：]\s*(\d{1,3})\s+booster\s*packs?\s+per\s+box\b/gi,
-      /\b(?:1\s*)?box\s*[:=]\s*(\d{1,3})\s*(?:booster\s*)?packs?\b/gi
+      /\b(?:1\s*)?box\s*[:=]\s*(\d{1,3})\s*(?:booster\s*)?packs?\b/gi,
+      /\b(?:1\s*)?box\s*[:=]\s*(\d{1,3})\s*[×x]?\s*(?:[a-z0-9.'-]+\s+){0,8}booster\s*packs?\b/gi
     );
   } else {
     patterns.push(
       /\b(?:number of|aantal)\s+(?:kaarten|cards?)\s+per\s+(?:booster\s*)?pack\s*[:：–-]?\s*(\d{1,3})\b/gi,
       /\b(?:aantal|number of)\s+(?:kaarten|cards?)\s+per\s+booster\s*[:：–-]?\s*(\d{1,3})\b/gi,
-      /\b(?:1\s*)?(?:booster\s*)?pack\s*[:=]\s*(\d{1,3})\s*(?:game\s*)?cards?\b/gi
+      /\b(?:1\s*)?(?:booster\s*)?pack\s*[:=]\s*(\d{1,3})\s*(?:game\s*)?cards?\b/gi,
+      /\b(?:1\s*)?(?:booster\s*)?pack\s*[:=]\s*(\d{1,3})\s*[×x]?\s*(?:(?:guaranteed|holo|foil|game|rare|additional)\s+){0,6}cards?\s*(?:per\s+pack)?\b/gi
     );
   }
   const numbers = [];
+  const input = String(text);
   for (const pattern of patterns) {
-    for (const match of String(text).matchAll(pattern)) {
-      const n = readNumber(match[1]);
-      if (n !== null) numbers.push(n);
+    for (const match of input.matchAll(pattern)) {
+      // "Gem Pack Vol. 7 Booster Packs" is a set name, not a box quantity.
+      const preceding = input.slice(Math.max(0, match.index - 24), match.index);
+      if (type === 'packs' &&
+          /\b(?:vol(?:ume)?|series|set)\.?\s*$/i.test(preceding)) continue;
+      const value = readNumber(match[1]);
+      if (value !== null) numbers.push(value);
     }
   }
   // A sealed retail box normally contains <=60 boosters; a booster card
