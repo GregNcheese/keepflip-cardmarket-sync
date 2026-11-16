@@ -19,6 +19,8 @@ In versie 2.1.6 bleven twee risicovolle paden over:
 - **Alle exacte officiële bronnen controleren:** bij conflicterende boosts/kaarten/taal wordt het conflicterende veld weer `null` en het resultaat `needs-review`.
 - **Veilige identiteitsselectie:** exacte Cardmarket-ID als gevraagd en optioneel exacte officiële bron-URL; ontbrekende ID of afgekeurde bron is geen bewijs.
 - **Meertalige producttypen:** Japanse, Koreaanse en Chinese boosters en dozen, terwijl blisters en display-cases als onzeker worden gelaten.
+- **Voorlopige autofill uit naam:** expliciete teksten als `20 packs`, `7 cards per pack`, `1BOX=30パック`, `1パック=5枚` en `Japanese` leveren invulvoorstellen wanneer onafhankelijke bronnen onvoldoende bewijs geven. Deze velden krijgen `provisionalFields` en `fieldConfidence="provisional"`, **nooit** `verifiedFields=true` op basis van de naam.
+- **Tegenstrijdige naam vs bron/taal:** automatisch `needs-review` met `diagnostics.nameHintConflicts`; de geverifieerde bron blijft intact.
 - **Bestaande veiligheidsgrens:** wijzigingen raken geen voorraad, aankopen, verkopen, afbeeldingen, Secrets of productiesysteem.
 
 ## Tests
@@ -41,3 +43,9 @@ GitHub Actions voert syntax, regressietests en Wrangler `--dry-run` uit zonder s
 - Er is nog geen end-to-end-test met de privé-POST /lookup op Cloudflare zelf gedaan; de tests gebruiken gecontroleerde nagebootste bronnen.
 
 De actieve productie-Worker hoort op 2.1.4 te blijven totdat echte end-to-end tests én expliciete goedkeuring zijn afgerond.
+
+## Voorbeeld zonder productregister
+
+Invoer: `Japanese Pokemon 151 Booster Box 20 packs 7 cards per pack`.
+
+De Worker kan voorlopig `suggestedProductType="box"`, `suggestedCount=20`, `suggestedCardsPerPack=7`, `suggestedLanguage="JP"` voorstellen. **Dit zijn uitsluitend naam-hints, geen bewezen productinhoud.** De bestaande UI moet deze waarden ter bevestiging tonen en mag ze niet automatisch als gecontroleerd opslaan. `requiresConfirmation=true` blijft gehandhaafd.
