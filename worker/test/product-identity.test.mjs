@@ -6,6 +6,7 @@ import {
   selectVerifiedProduct, scopedProductHtml
 } from '../src/product-identity.js';
 import { inferProductType } from '../src/autofill.js';
+import { extractNameHints } from '../src/name-hints.js';
 
 const normalize = value => String(value || '').normalize('NFKD')
   .replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -222,4 +223,57 @@ test('Japanese box and Korean pack counts do not become a card-per-pack guess',a
   assert.equal(result.suggestedCardsPerPack,5);
   assert.equal(result.suggestedLanguage,null);
   assert.equal(result.requiresConfirmation,true);
+});
+
+test('only explicit product-name quantities become provisional suggestions',()=>{
+  assert.deepEqual(extractNameHints('Japanese Pokemon 151 Booster Box 20 packs 7 cards per pack'),{
+    boosters:20,cardsPerPack:7,language:'JP',origin:'product-name-unverified'
+  });
+  assert.equal(extractNameHints('Paldean Fates ETB'),extractNameHints('Paldean Fates ETB')); // deterministic
+  assert.equal(extractNameHints('Paldean Fates ETB').boosters,null);
+  assert.equal(extractNameHints('2 ETB').boosters,null);
+  assert.equal(extractNameHints('20 packs 30 packs').boosters,null);
+  assert.equal(extractNameHints('韓国語 1팩=5장').cardsPerPack,5);
+  assert.equal(extractNameHints('1BOX=30パック').boosters,30);
+  assert.equal(extractNameHints('Simplified Chinese 1盒=20包').language,'ZH-CN');
+  assert.equal(extractNameHints('Japanese and Korean').language,null);
+});
+
+test('product name autofills count and language as PROVISIONAL without inventing sources',async()=>{
+  const name='Japanese Pokemon 151 Booster Box 20 packs 7 cards per pack';
+  const result=await fakeLookup({productName:name,productType:'other'}, {records:[]});
+  assert.equal(result.productType,'box');
+  assert.equal(result.suggestedCount,20);
+  assert.equal(result.suggestedCardsPerPack,7);
+  assert.equal(result.suggestedLanguage,'JP');
+  assert.equal(result.verifiedFields.boosters,false);
+  assert.equal(result.verifiedFields.cardsPerPack,false);
+  assert.equal(result.verifiedFields.language,false);
+  assert.equal(result.provisionalFields.boosters,true);
+  assert.equal(result.provisionalFields.cardsPerPack,true);
+  assert.equal(result.provisionalFields.language,true);
+  assert.equal(result.fieldConfidence.boosters,'provisional');
+  assert.equal(result.status,'needs-review');
+  assert.equal(result.requiresConfirmation,true);
+  assert.match(result.warning,/voorlopige/i);
+});
+
+test('a loose booster can propose cards per booster but never boosters per box',async()=>{
+  const name='Japanese Single Booster Pack 7 cards per pack';
+  const result=await fakeLookup({productName:name,productType:'pack'}, {records:[]});
+  assert.equal(result.productType,'pack');
+  assert.equal(result.suggestedCount,null);
+  assert.equal(result.suggestedCardsPerPack,7);
+  assert.equal(result.provisionalFields.cardsPerPack,true);
+  assert.equal(result.missingFields.includes('boosters'),false);
+  assert.equal(result.requiresConfirmation,true);
+});
+
+test('name vs entered card language mismatch is flagged without overwriting',async()=>{
+  const name='Japanese Booster Box 20 packs';
+  const result=await fakeLookup({productName:name,productType:'box',language:'KR'}, {records:[]});
+  assert.equal(result.suggestedLanguage,null);
+  assert.equal(result.provisionalFields.language,false);
+  assert.equal(result.diagnostics.nameHintConflicts[0].field,'language');
+  assert.equal(result.status,'needs-review');
 });
