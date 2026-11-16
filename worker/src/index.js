@@ -1531,7 +1531,7 @@ async function lookup(data, env) {
         // Shopify page HTML can render a shortened or localized heading.
         // Read its exact product JSON only after the Shopify search and product
         // path were approved; independent JSON title MUST match requested product.
-        const json = isLiveCandidate && item.html
+        const json = isLiveCandidate
           ? await fetchLiveProductJson(item.url, name, type, language)
           : { status:'not-live' };
         if (isLiveCandidate) {
@@ -1544,7 +1544,7 @@ async function lookup(data, env) {
         const titleMatch = isLiveCandidate
           ? (matchLive || json.status === 'verified-title')
           : exactRetailTitleMatches(item.html, name, type);
-        if (!item.html || !titleMatch) continue;
+        if ((!item.html && json.status !== 'verified-title') || !titleMatch) continue;
         const diagnostic = out.diagnostics.secondaryFetch?.find(x => x.url === item.url);
         if (diagnostic) {
           diagnostic.titleMatch = true;
@@ -1564,7 +1564,7 @@ async function lookup(data, env) {
             ? 'verified-retailer-product-title'
             : 'verified-shopify-product-json-title';
         }
-        const text = htmlText(scopedProductHtml(item.html));
+        const text = item.html ? htmlText(scopedProductHtml(item.html)) : '';
         // JSON description is the actual product body, unlike broad storefront
         // HTML which may include unrelated items, popups, and recommendations.
         const productText = json.status === 'verified-title' && json.text
