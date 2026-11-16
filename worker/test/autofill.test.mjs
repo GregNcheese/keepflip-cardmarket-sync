@@ -119,6 +119,8 @@ test('mismatched user product type is not silently replaced', async () => {
   assert.equal(result.suggestedProductType, 'bundle');
   assert.deepEqual(result.diagnostics.typeMismatch, {supplied:'etb',detected:'bundle'});
   assert.equal(result.suggestedCount, null);
+  assert.deepEqual(result.missingFields, ['productType']);
+  assert.equal(result.fieldConfidence.productType, 'conflict');
 });
 
 test('wrong or missing product ID in registry never matches a specific requested ID', async () => {
