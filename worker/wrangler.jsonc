@@ -1,0 +1,19 @@
+{
+  // Keep & Flip Worker source-control TEST, not a production deployment.
+  // The existing Worker is named late-smoke-2a21 on Cloudflare.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "late-smoke-2a21",
+  "main": "./src/index.js",
+  "compatibility_date": "2026-11-16",
+  "workers_dev": true,
+  // Keep any production non-secret variables already set in the dashboard.
+  // Secrets stay in Cloudflare and must NEVER be stored in this repository.
+  "keep_vars": true,
+  // Previews are isolated and DO NOT inherit production variables or secrets.
+  "previews": {
+    "vars": {
+      // No Google Search calls or unexpected costs during initial preview tests.
+      "ENABLE_GOOGLE_SEARCH": "false"
+    }
+  }
+}
