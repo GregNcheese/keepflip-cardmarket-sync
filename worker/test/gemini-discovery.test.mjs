@@ -239,3 +239,51 @@ test('Gemini request only contains public name/type/language, never inventory or
     assert.doesNotMatch(JSON.stringify(body),/unit-test-secret/);
   } finally {globalThis.fetch=saved}
 });
+
+
+test('Google 429 preserves safe quota diagnostics, without exposing raw error text', async () => {
+  const saved = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    error: {
+      code: 429,
+      status: 'RESOURCE_EXHAUSTED',
+      message: 'Sensitive internal quota details should never be exposed',
+      details: [
+        {
+          '@type': 'type.googleapis.com/google.rpc.QuotaFailure',
+          violations: [{ description: 'Quota exceeded: GenerateContentRequestsPerDayPerProject' }]
+        },
+        {
+          '@type': 'type.googleapis.com/google.rpc.RetryInfo',
+          retryDelay: '7.5s'
+        }
+      ]
+    }
+  }), { status: 429, headers: { 'Content-Type': 'application/json' } });
+  try {
+    const result = await discoverProductWithGemini({
+      ENABLE_GOOGLE_SEARCH: 'true',
+      GEMINI_API_KEY: 'secret-must-not-appear'
+    }, 'Pokemon Card 151 Japanese Booster Box', 'box', 'JP', allowOfficial, allowRetail);
+    assert.equal(result.status, 'gemini-http-429');
+    assert.equal(result.errorStatus, 'RESOURCE_EXHAUSTED');
+    assert.equal(result.errorCategory, 'daily-quota');
+    assert.equal(result.retryAfterSeconds, 8);
+    assert.equal(result.groundingUsed, false);
+    assert.equal(result.searchQueries.length, 0);
+    assert.doesNotMatch(JSON.stringify(result), /Sensitive internal|secret-must-not-appear/);
+  } finally { globalThis.fetch = saved; }
+});
+
+test('429 with unstructured response remains safe and explains uncertainty', async () => {
+  const saved = globalThis.fetch;
+  globalThis.fetch = async () => new Response('unstructured error', { status: 429 });
+  try {
+    const result = await discoverProductWithGemini({
+      ENABLE_GOOGLE_SEARCH: 'true', GEMINI_API_KEY: 'fake'
+    }, 'Pokemon Card 151 Japanese Booster Box', 'box', 'JP', allowOfficial, allowRetail);
+    assert.equal(result.status, 'gemini-http-429');
+    assert.equal(result.errorCategory, 'unspecified-429');
+    assert.equal(result.retryAfterSeconds, null);
+  } finally { globalThis.fetch = saved; }
+});
