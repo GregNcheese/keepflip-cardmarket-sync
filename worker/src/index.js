@@ -1201,14 +1201,17 @@ async function lookup(data, env) {
     out.fieldConfidence = { productType: 'conflict' };
     return out;
   }
-  const curated = CURATED.find(
+  // In live-discovery preview, no locally curated product values or
+  // prefilled register may satisfy an unknown product. Online evidence only.
+  const directLiveMode = String(env.DIRECT_WEB_DISCOVERY || '').toLowerCase() === 'true';
+  const curated = directLiveMode ? null : CURATED.find(
     item =>
       item.type === type &&
       item.names.some(
         alias => norm(alias) === norm(name)
       )
   );
-  const registry = curated
+  const registry = directLiveMode || curated
     ? null
     : await fromRegistry(
         env,
