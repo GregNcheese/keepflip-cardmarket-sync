@@ -199,3 +199,54 @@ test('direct live mode does not silently use the old manually curated product re
     assert.equal(out.diagnostics.liveDiscovery.status,'no-exact-online-match');
   }finally{globalThis.fetch=original;}
 });
+
+
+test('Taiwan traditional Chinese contents verify from matching Shopify JSON even if HTML heading differs',async()=>{
+  const original=globalThis.fetch;
+  const title='[Traditional Chinese] Pokémon Glory of Team Rocket sv10 Booster Box';
+  const handle='traditional-chinese-pokemon-glory-of-team-rocket-sv10-booster-box';
+  globalThis.fetch=async input=>{
+    const url=String(input);
+    if(url.includes('api.tcgdex.net/'))return new Response('[]',{
+      headers:{'Content-Type':'application/json'}
+    });
+    if(url.includes('/search/suggest.json'))return fakeShopify(
+      url.startsWith('https://www.tcghobby.com/') ?
+        [{title,url:'/en-gb/products/'+handle+'?tracking=omitted'}]:[]
+    );
+    if(url==='https://www.tcghobby.com/en-gb/products/'+handle)
+      return new Response('<html><h1>Shop product listing</h1></html>',{
+        headers:{'Content-Type':'text/html'}
+      });
+    if(url==='https://www.tcghobby.com/products/'+handle+'.js')
+      return new Response(JSON.stringify({
+        title, description:'<p>Language Traditional Chinese</p><p>Content 1 box = 30 packs 1 pack = 6 cards</p>'
+      }),{headers:{'Content-Type':'text/javascript; charset=utf-8'}});
+    return new Response('not found',{status:404});
+  };
+  try{
+    const response=await worker.fetch(new Request(base+'/lookup',{
+      method:'POST',
+      headers:{Authorization:'Bearer test-token',Origin:base,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        productName:'Pokemon Glory of Team Rocket sv10 Traditional Chinese Booster Box',
+        productType:'box', language:'ZH-TW'
+      })
+    }),{
+      KEEPFLIP_ACCESS_TOKEN:'test-token',
+      APP_ORIGIN:'https://gregncheese.github.io',
+      DIRECT_WEB_DISCOVERY:'true',ENABLE_GOOGLE_SEARCH:'false'
+    });
+    const out=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(out.suggestedCount,30);
+    assert.equal(out.suggestedCardsPerPack,6);
+    assert.equal(out.suggestedLanguage,'ZH-TW');
+    assert.equal(out.verifiedFields.boosters,true);
+    assert.equal(out.verifiedFields.cardsPerPack,true);
+    assert.equal(out.verifiedFields.language,true);
+    assert.equal(out.verifiedFields.productType,true);
+    assert.equal(out.diagnostics.secondaryFetch[0].titleEvidence,'independent-shopify-json-title');
+    assert.equal(out.sources.some(s=>s.url.includes('www.tcghobby.com')),true);
+  }finally{globalThis.fetch=original;}
+});
