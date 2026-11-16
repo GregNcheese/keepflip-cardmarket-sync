@@ -84,6 +84,10 @@ export function matchesLiveProductTitle(name, title, type, language) {
   if (requested.includes('sleeved') !== actual.includes('sleeved')) return false;
   if (requested.includes('no shrink') !== actual.includes('no shrink')) return false;
   if (requested.includes('deluxe') !== actual.includes('deluxe')) return false;
+  // A sealed case, lot or multi-box bundle is not a single booster box.
+  // Retailers sometimes suffix ordinary product names with "(1 sealed case)".
+  if (!/\bcase\b/.test(requested) && /\bcase\b/.test(actual)) return false;
+  if (!/\blot\b/.test(requested) && /\blot\b/.test(actual)) return false;
   const required = [...new Set(coreTerms(name))];
   const actualTerms = new Set(coreTerms(title));
   if (!required.length) return false;
