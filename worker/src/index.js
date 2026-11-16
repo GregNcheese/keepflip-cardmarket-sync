@@ -65,6 +65,10 @@ const RETAIL_DOMAINS = new Set([
   'rarecards.nl',
   'www.rarecards.nl',
   'www.tcghobby.com',
+  'card-binder.com',
+  'pikamon.eu',
+  'www.danireon.com',
+  'gchobby.com',
   'tcgplayer.com',
   'www.tcgplayer.com'
 ]);
@@ -521,7 +525,7 @@ function sameRetailProduct(left, right) {
     const a = new URL(left);
     const b = new URL(right);
     const canonical = u => u.pathname
-      .replace(/^\/(?:en(?:-gb)?|nl|de|fr|zh)\/products\//, '/products/')
+      .replace(/^\/(?:[a-z]{2}(?:-[a-z]{2})?)\/products\//, '/products/')
       .replace(/\/$/, '');
     return a.protocol === 'https:' &&
       a.origin === b.origin && canonical(a) === canonical(b);
@@ -547,7 +551,8 @@ async function fetchLiveProductJson(sourceUrl, name, type, language) {
   let url;
   try {
     const source = new URL(sourceUrl);
-    if (!['rarecards.nl', 'www.cardnation.nl', 'www.tcghobby.com'].includes(source.hostname) ||
+    if (!['rarecards.nl', 'www.cardnation.nl', 'www.tcghobby.com',
+      'card-binder.com', 'pikamon.eu', 'www.danireon.com', 'gchobby.com'].includes(source.hostname) ||
       source.protocol !== 'https:' || source.port ||
       source.username || source.password) return { status:'invalid-host' };
     const match = source.pathname.match(/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?products\/([a-z0-9-]{2,150})\/?$/i);
