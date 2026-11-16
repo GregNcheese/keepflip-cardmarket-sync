@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - test/cloudflare-worker-214-source
+      - test/cloudflare-worker-autofill-216
     paths:
       - "worker/**"
       - ".github/workflows/cloudflare-worker-source-test.yml"
