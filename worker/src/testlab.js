@@ -9,7 +9,7 @@ export function renderTestLab() {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Keep & Flip · Gemini Testlab 2.1.8</title>
+<title>Keep & Flip · Productbronnen Testlab 2.1.8 + CardOS</title>
 <style>
 :root{color-scheme:dark;--bg:#0d1424;--surface:#172238;--surface2:#1f2e47;--line:#35445f;--text:#f3f6fd;--muted:#a5b5d0;--aqua:#72e4d4;--amber:#ffd18b;--rose:#ff9fa5}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top left,#1e3150 0%,var(--bg) 55%);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:var(--text);min-height:100vh}
@@ -34,7 +34,7 @@ a{color:#91e8ff;overflow-wrap:anywhere}.source .small{color:var(--muted)}summary
 </head>
 <body>
 <main>
-<header><div><div class="eyebrow">Keep & Flip · geïsoleerde testomgeving</div><h1>Gemini Testlab</h1><p>Controleer Google Search, productinhoud en bronbewijzen voordat we autofill koppelen aan de app.</p></div><span class="tag">Worker 2.1.8 TEST</span></header>
+<header><div><div class="eyebrow">Keep & Flip · geïsoleerde testomgeving</div><h1>Productbronnen Testlab</h1><p>CardOS, Gemini en bestaande bronfallbacks. <a href="/cardos-lab">Open CardOS API-test (sleutel/credits, zoeken, productdetails)</a>.</p></div><span class="tag">Worker 2.1.8 TEST</span></header>
 <div class="layout">
   <div class="stack">
     <section class="panel">
@@ -63,7 +63,7 @@ a{color:#91e8ff;overflow-wrap:anywhere}.source .small{color:var(--muted)}summary
           <div class="field"><label for="language">Taal (optioneel)</label><select id="language"><option value="">Onbekend</option><option value="EN">Engels</option><option value="JP">Japans</option><option value="KR">Koreaans</option><option value="ZH-CN">Chinees · vereenvoudigd</option><option value="ZH-TW">Chinees · traditioneel</option></select></div>
         </div>
         <div class="actions"><button type="submit" id="run">Start één zoektest</button></div>
-        <p class="fine">Er wordt niets aan je collectie toegevoegd. Eén zoektest kan Gemini Search-kosten veroorzaken. Geen automatische batchtests.</p>
+        <p class="fine">Er wordt niets aan je collectie toegevoegd. CardOS kan 1–2 credits verbruiken wanneer de sleutel actief is. Google Search staat in deze preview uit.</p>
       </form>
     </section>
   </div>
@@ -142,6 +142,7 @@ a{color:#91e8ff;overflow-wrap:anywhere}.source .small{color:var(--muted)}summary
     var used=data.groundingUsed===true?'Ja':'Nee';
     box.append(line('Gemini Google Search: '+(d.status==='disabled-direct-search'?'niet nodig (uitgeschakeld)':'grounding '+used+' · '+(d.status||'niet gerapporteerd'))));
     box.append(line('Zoekqueries: '+(d.queryCount??'—')+' · officiële kandidaten: '+(d.officialCandidates??'—')+' · winkels: '+(d.retailerCandidates??'—')));
+    box.append(line('CardOS: '+(data.diagnostics?.cardos?.status||'niet ingesteld')+' · credits over: '+(data.diagnostics?.cardos?.creditsRemaining??'onbekend')));
     box.append(line('Broninformatie bevestigd: '+(data.sourceVerified?'gedeeltelijk/volledig':'nee')+' · Gemini antwoord: '+(data.geminiResponded?'ja':'nee')));
     if (d.status==='gemini-http-429'){
       var categoryNames={
