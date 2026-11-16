@@ -139,6 +139,29 @@ a{color:#91e8ff;overflow-wrap:anywhere}.source .small{color:var(--muted)}summary
     box.append(line('Google Search grounding: '+used+' · status: '+(d.status||'niet gerapporteerd')));
     box.append(line('Zoekqueries: '+(d.queryCount??'—')+' · officiële kandidaten: '+(d.officialCandidates??'—')+' · winkels: '+(d.retailerCandidates??'—')));
     box.append(line('Broninformatie bevestigd: '+(data.sourceVerified?'gedeeltelijk/volledig':'nee')+' · Gemini antwoord: '+(data.geminiResponded?'ja':'nee')));
+    if (d.status==='gemini-http-429'){
+      var categoryNames={
+        'search-grounding-quota':'Google Search-groundinglimiet',
+        'daily-quota':'dagelijkse API-limiet',
+        'rate-limit':'tijdelijke aanvraaglimiet',
+        'billing-or-spend-cap':'mogelijk betaal- of bestedingslimiet',
+        'quota-or-rate-limit':'API-quota of aanvraaglimiet',
+        'unspecified-429':'nog onbekende 429-oorzaak'
+      };
+      var explanation=categoryNames[d.errorCategory]||'nog onbekende 429-oorzaak';
+      var retry=Number.isFinite(d.retryAfterSeconds)?
+        ' · Google adviseert minimaal '+d.retryAfterSeconds+' seconden voor een nieuwe poging.':'';
+      $('notice').textContent='Gemini Search is door Google afgewezen (HTTP 429: '+explanation+'). Dit is géén geslaagde Google-zoektest.'+retry;
+      $('notice').style.color='var(--rose)';
+      box.append(line('Gemini HTTP 429 · oorzaak: '+explanation+' · API-status: '+(d.errorStatus||'onbekend')));
+      var a=document.createElement('a');a.href='https://aistudio.google.com/rate-limit';a.target='_blank';a.rel='noopener noreferrer';a.textContent='Controleer je Google AI Studio-limieten (inclusief Search grounding)';
+      box.append(a);
+    } else if(d.status&&String(d.status).startsWith('gemini-http-')){
+      $('notice').textContent='Gemini-aanvraag mislukt: '+d.status+'. Andere bronnen kunnen wel informatie hebben opgeleverd.';
+      $('notice').style.color='var(--amber)';
+    } else {
+      $('notice').style.color='';
+    }
     var s=$('sources');s.replaceChildren();
     var sources=Array.isArray(data.sources)?data.sources:[];
     if(!sources.length)s.append(line('Geen gecontroleerde bronnen teruggegeven.'));
