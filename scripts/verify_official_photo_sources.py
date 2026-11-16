@@ -29,6 +29,9 @@ class VisibleText(HTMLParser):
         self.skip=0
     def handle_starttag(self,tag,attrs):
         if tag in ("script","style"):self.skip+=1
+        if tag=="img" and not self.skip:
+            for key,value in attrs:
+                if key in ("alt","title") and value:self.parts.append(str(value))
     def handle_endtag(self,tag):
         if tag in ("script","style") and self.skip:self.skip-=1
     def handle_data(self,data):
@@ -101,6 +104,9 @@ def check_card(card,page_fetch=fetch_html,image_probe=probe_jpeg):
     try:
         text=page_fetch(card["sourcePage"])
         if not page_check(card,text):
+            debug=VisibleText();debug.feed(text)
+            visible=re.sub(r"\\s+"," "," ".join(debug.parts))
+            print("PAGE DIAGNOSTIC",card["id"],"chars",len(text),"setcode",card["setCode"] in visible.upper(),"number",card["localNumber"] in visible,"snippet",repr(visible[:140]))
             record["photoStatus"]="source-mismatch"
             record["details"]="Official page did not confirm the expected set and collector number"
             return record
