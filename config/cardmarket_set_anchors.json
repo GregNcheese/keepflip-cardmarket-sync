@@ -1,0 +1,14 @@
+{
+  "schema": "keepflip-cardmarket-set-anchors-v1",
+  "sets": [
+    {
+      "setId": "CP6",
+      "setSlug": "Expansion-Pack-20th-Anniversary",
+      "setName": "Expansion Pack 20th Anniversary",
+      "language": "ja",
+      "anchorProductId": 562471,
+      "anchorName": "Ninetales",
+      "evidenceUrl": "https://cardstand.app/pokemon/expansion-pack-20th-anniversary/ninetales-015"
+    }
+  ]
+}
