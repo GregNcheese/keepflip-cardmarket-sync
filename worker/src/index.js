@@ -446,7 +446,7 @@ function exactRetailTitleMatches(html, name, type) {
       /<(?:h1|title)\b[^>]*>([\s\S]*?)<\/(?:h1|title)>/gi
     )
   ]
-    .map(x => norm(htmlText(x[1])))
+    .map(x => htmlText(x[1]))
     .filter(Boolean);
   const required = norm(name)
     .split(' ')
@@ -465,17 +465,18 @@ function exactRetailTitleMatches(html, name, type) {
     'traditional chinese'
   ];
   const requested = norm(name);
-  return heads.some(h =>
-    required.every(word =>
+  return heads.some(heading => {
+    const h = norm(heading);
+    return required.every(word =>
       h.split(' ').includes(word)
     ) &&
     qualifiers.every(q =>
       !requested.includes(q) || h.includes(q)
     ) &&
-    editionCompatible(name, h) &&
+    editionCompatible(name, heading) &&
     (type !== 'etb' || h.includes('trainer')) &&
-    (type !== 'bundle' || h.includes('bundle'))
-  );
+    (type !== 'bundle' || h.includes('bundle'));
+  });
 }
 async function fetchRetail(url, env, hops = 0) {
   const safe = safeRetailUrl(url, env);
