@@ -121,12 +121,12 @@ function safeShopProductUrl(candidate, shop) {
     return u.origin + u.pathname;
   } catch { return null; }
 }
-export function searchQueries(name, type) {
+export function searchQueries(name, type, language = '') {
   const important = coreTerms(name).slice(0, 7).join(' ');
   if (!important) return [];
   // KR product queries MUST include the language. Generic "151 booster box"
   // can return ten Japanese/English results and hide the correct Korean box.
-  const languageTerm = /\b(?:korean|kr)\b/.test(normal(name))
+  const languageTerm = language === 'KR' || /\b(?:korean|kr)\b/.test(normal(name))
     ? ' korean' : '';
   const term = type === 'etb' ? 'elite trainer box' :
     type === 'bundle' ? 'booster bundle' :
@@ -172,7 +172,7 @@ async function fetchSuggestions(shop, query) {
 export async function discoverLiveProductPages(env, name, type, language) {
   const empty = { status: 'disabled', retailUrls: [], diagnostics: [] };
   if (String(env?.DIRECT_WEB_DISCOVERY || '').toLowerCase() !== 'true') return empty;
-  const queries = searchQueries(name, type);
+  const queries = searchQueries(name, type, language);
   if (!queries.length) return { ...empty, status:'insufficient-name' };
   const shops = selectedStores(name, language);
   const first = await Promise.all(shops.map(s => fetchSuggestions(s, queries[0])));
