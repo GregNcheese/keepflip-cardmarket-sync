@@ -9,7 +9,8 @@ const cases=[
   ['Pokemon Card 151 Japanese Booster Box','box','JP'],
   ['Pokemon TCG Simplified Chinese Gem Pack Vol 1 Booster Box','box','ZH-CN'],
   ['Scarlet & Violet Paldean Fates Booster Bundle','bundle','EN'],
-  ['Pokemon Glory of Team Rocket sv10 Traditional Chinese Booster Box','box','ZH-TW']
+  ['Pokemon Glory of Team Rocket sv10 Traditional Chinese Booster Box','box','ZH-TW'],
+  ['Pokemon Gem Pack Vol 7 CBB7C Simplified Chinese Booster Box','box','ZH-CN']
 ];
 let matches=0;
 for(const [name,type,language] of cases){
