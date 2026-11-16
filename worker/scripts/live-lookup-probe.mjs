@@ -8,7 +8,8 @@ import worker from '../src/index.js';
 const cases=[
   ['Pokemon Card 151 Japanese Booster Box','box','JP'],
   ['Pokemon TCG Simplified Chinese Gem Pack Vol 1 Booster Box','box','ZH-CN'],
-  ['Scarlet & Violet Paldean Fates Booster Bundle','bundle','EN']
+  ['Scarlet & Violet Paldean Fates Booster Bundle','bundle','EN'],
+  ['Pokemon Glory of Team Rocket sv10 Traditional Chinese Booster Box','box','ZH-TW']
 ];
 let matches=0;
 for(const [name,type,language] of cases){
