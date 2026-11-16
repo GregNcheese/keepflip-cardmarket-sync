@@ -12,3 +12,7 @@ This file is intentionally committed to the **test branch only** to trigger Clou
 - No real customer or inventory data is sent to GitHub
 
 This file does not change the Worker runtime or deploy it from GitHub Actions.
+
+## Retry after Cloudflare root-directory mismatch
+
+The previous Cloudflare build `cf7ac720` used root `/` and build command `None`, even though the dashboard's Previews Base was set to `/worker`. The temporary, **test-branch-only** root `wrangler.jsonc` now points at `./worker/src/index.js` and defines the required `previews` settings. This commit triggers a fresh preview build via the `worker/*` watch path. Production remains untouched.
