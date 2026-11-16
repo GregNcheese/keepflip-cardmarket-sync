@@ -21,6 +21,8 @@ test('strict live matching supports JP and CN without mixing EN or Pokemon Cente
     'Pokémon (JP) Gem Pack Vol.1: Booster Box','box','ZH-CN'), false);
   assert.equal(matchesLiveProductTitle('151 Japanese Booster Box', '151 JP Booster Box (no shrink)', 'box','JP'),false);
   assert.equal(matchesLiveProductTitle('151 Japanese Booster Box', '151 JP Booster Box Case', 'box','JP'),false);
+  assert.equal(matchesLiveProductTitle('Paldean Fates Booster Bundle',
+    'Paldean Fates Booster Bundle Display','bundle','EN'), false);
 });
 
 test('queries are created from the name, not from a product database', () => {
@@ -114,6 +116,7 @@ test('Worker fetches live JP sealed product, proves 20 x 7, skips Google Search'
     assert.equal(out.suggestedLanguage,'JP');
     assert.equal(out.verifiedFields.boosters,true);
     assert.equal(out.verifiedFields.cardsPerPack,true);
+    assert.equal(out.verifiedFields.productType,true);
     assert.equal(out.diagnostics.liveDiscovery.matchedProducts,1);
     assert.equal(out.diagnostics.googleDiscovery.status,'disabled-direct-search');
     assert.equal(requests.some(x=>x.includes('generativelanguage.googleapis.com')),false);
