@@ -7,7 +7,7 @@ export function inferProductType(productName) {
     .replace(/[‐‑‒–—]/g, '-').replace(/\s+/g, ' ').trim();
   // Cases and blisters may contain multiple independently packaged products.
   // They must not be mistaken for a single booster box / booster pack.
-  if (/\b(?:booster case|display case|case of boxes|3[- ]pack blister|three[- ]pack blister)\b/.test(name)) return null;
+  if (/\b(?:booster (?:box|display) case|booster case|display case|case of (?:booster )?boxes|3[- ]pack blister|three[- ]pack blister)\b/.test(name)) return null;
   if (/\b(?:ultra[- ]premium collection|ultra[- ]premium box|upc)\b/.test(name)) return 'upc';
   if (/\b(?:elite[- ]trainer[- ]box|elite trainer box|elite trainerbox|etb)\b/.test(name)) return 'etb';
   if (/\b(?:booster bundle|boosterbundel|booster\s*bundel)\b/.test(name)) return 'bundle';
