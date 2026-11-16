@@ -1432,11 +1432,13 @@ async function lookup(data, env) {
           url: x.url,
           status: x.status,
           titleMatch: !!(
-            x.html &&
-            exactRetailTitleMatches(
-              x.html,
-              name,
-              type
+            x.html && (
+              live.retailUrls.includes(x.url)
+                ? [...x.html.matchAll(/<(?:h1|title)\b[^>]*>([\s\S]*?)<\/(?:h1|title)>/gi)]
+                    .some(m => matchesLiveProductTitle(
+                      name, htmlText(m[1]), type, language
+                    ))
+                : exactRetailTitleMatches(x.html, name, type)
             )
           )
         }));
@@ -1447,10 +1449,10 @@ async function lookup(data, env) {
             .some(x => matchesLiveProductTitle(
               name, htmlText(x[1]), type, language
             ));
-        if (
-          !item.html ||
-          !(matchLive || exactRetailTitleMatches(item.html, name, type))
-        ) continue;
+        // Never downgrade strict live matching to a looser legacy matcher.
+        const titleMatch = isLiveCandidate
+          ? matchLive : exactRetailTitleMatches(item.html, name, type);
+        if (!item.html || !titleMatch) continue;
         const text = htmlText(scopedProductHtml(item.html));
         const packs = countFromText(text, 'packs');
         const cards = countFromText(text, 'cards');
@@ -1482,7 +1484,10 @@ async function lookup(data, env) {
           'Onafhankelijke productpagina',
           'retailer-product'
         );
+        // When live sources disagree, applyField must see ALL matching pages.
+        // An early break would conceal contradictory counts or language.
         if (
+          !live.retailUrls.length &&
           out.verifiedFields.cardsPerPack &&
           out.verifiedFields.boosters &&
           out.verifiedFields.language
