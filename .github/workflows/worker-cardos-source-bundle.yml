@@ -6,6 +6,10 @@ on:
     paths:
       - "worker/src/cardos.js"
       - "worker/src/cardos-lab.js"
+      - "worker/src/index.js"
+      - "worker/src/testlab.js"
+      - "worker/src/live-product-search.js"
+      - "worker/wrangler.jsonc"
       - ".github/workflows/worker-cardos-source-bundle.yml"
   workflow_dispatch:
 permissions:
