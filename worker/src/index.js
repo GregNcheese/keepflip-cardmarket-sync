@@ -148,7 +148,14 @@ function allowedOrigin(request, env) {
   // Same-origin calls from the isolated Worker-hosted Testlab are allowed;
   // the existing Bearer token remains required on /lookup.
   const ownOrigin = new URL(request.url).origin;
-  return origin && (origin === expected || origin === ownOrigin) ? origin : '';
+  // Isolated TEST preview may also serve an HTML file opened locally.
+  // This does NOT bypass the existing Bearer-token gate, and is explicitly
+  // disabled in production unless opted in via a TEST-only preview variable.
+  const localTestAllowed = origin === 'null' &&
+    String(env.CARDOS_TEST_ALLOW_FILE_ORIGIN || '').toLowerCase() === 'true' &&
+    String(env.DIRECT_WEB_DISCOVERY || '').toLowerCase() === 'true';
+  return origin && (origin === expected || origin === ownOrigin || localTestAllowed)
+    ? origin : '';
 }
 async function tokenMatches(given, expected) {
   if (
