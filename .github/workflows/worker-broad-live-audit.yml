@@ -1,0 +1,43 @@
+name: Keep & Flip TEST — broad live product coverage audit (NO SECRETS)
+on:
+  push:
+    branches:
+      - test/cloudflare-worker-gemini-autofill-218
+    paths:
+      - "worker/scripts/broad-live-audit.mjs"
+      - ".github/workflows/worker-broad-live-audit.yml"
+  workflow_dispatch:
+    inputs:
+      max_cases:
+        description: 'Maximum number of end-to-end tests (20-160)'
+        required: false
+        type: choice
+        options:
+          - '60'
+          - '120'
+          - '160'
+        default: '120'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MAX_CASES: ${{ inputs.max_cases || '120' }}
+      SAMPLE_LIMIT: '75'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run on-demand product lookup against diverse real online sources
+        run: node worker/scripts/broad-live-audit.mjs
+      - name: Save audit results (no secrets, no product register)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keepflip-broad-coverage-audit
+          path: worker/audit-results/broad-live-audit.json
+          if-no-files-found: warn
+          retention-days: 7
