@@ -1232,7 +1232,11 @@ async function lookup(data, env) {
     status: discovery.status,
     officialCandidates: discovery.officialUrls.length,
     retailerCandidates: discovery.retailUrls.length,
-    queryCount: discovery.searchQueries.length
+    queryCount: discovery.searchQueries.length,
+    // No raw Gemini error message or secret is sent to the browser.
+    errorStatus: discovery.errorStatus || null,
+    errorCategory: discovery.errorCategory || null,
+    retryAfterSeconds: discovery.retryAfterSeconds ?? null
   };
   out.searchSuggestionsHtml = discovery.searchSuggestionsHtml;
   const urls = candidateUrls(
