@@ -2,7 +2,7 @@ name: Keep & Flip Worker Preview health check (NO DEPLOY)
 on:
   push:
     branches:
-      - test/cloudflare-worker-autofill-217
+      - test/cloudflare-worker-gemini-autofill-218
     paths:
       - "worker/**"
       - "wrangler.jsonc"
@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Verify published preview config without secrets
         env:
-          PREVIEW_HEALTH_URL: https://test-cloudflare-worker-autofill-217-late-smoke-2a21.chokorii.workers.dev/health
+          PREVIEW_HEALTH_URL: https://test-cloudflare-worker-gemini-autofill-218-late-smoke-2a21.chokorii.workers.dev/health
         run: |
           python3 - <<'PY'
           import json, os, time, urllib.request, urllib.error, sys
@@ -28,13 +28,14 @@ jobs:
                   with urllib.request.urlopen(req,timeout=12) as response:
                       data = json.load(response)
                   checks = {
-                      'version-2.1.7': data.get('version')=='2.1.7',
+                      'version-2.1.8': data.get('version')=='2.1.8',
                       'online': data.get('status')=='online',
                       'access-secret-configured': data.get('accessConfigured') is True,
                       'registry-url-configured': data.get('registryConfigured') is True,
-                      'google-search-disabled': data.get('googleSearchEnabled') is False,
+                      'google-search-enabled-in-preview': data.get('googleSearchEnabled') is True,
                   }
                   print('Preview health:', {k: bool(v) for k,v in checks.items()})
+                  print('Gemini secret configured:', bool(data.get('geminiConfigured')))  # no secret value
                   if all(checks.values()):
                       print('Preview config OK (no sensitive values requested or logged)')
                       sys.exit(0)
