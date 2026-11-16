@@ -84,6 +84,14 @@ export function matchCardosProduct(obj,name,type,requestedLanguage) {
   if(!obj||typeof obj!=='object'||!obj.id||!obj.name)return false;
   const actualType=String(obj.product_type||'');
   if(type!=='other' && !TYPES[type]?.includes(actualType))return false;
+  const productTitle=clean(obj.name);
+  // Structured product_type and human-readable product name must agree.
+  // Providers can contain misclassified rows; never silently treat an ETB
+  // as a booster bundle because it shares the same set name.
+  if(type==='bundle' && !/\b(?:bundle|bundel)\b/.test(productTitle))return false;
+  if(type==='etb' && !/(?:elite trainer box|trainerbox|\betb\b)/.test(productTitle))return false;
+  if(type==='box' && !/(?:box|display|ボックス|박스)/.test(productTitle))return false;
+  if(type==='upc' && !/(?:ultra premium|\bupc\b)/.test(productTitle))return false;
   if(type==='other' && TYPES.box.includes(actualType))return false;
   if(!languageCompatible(obj,requestedLanguage))return false;
   if(!editionCompatible(name,obj))return false;
