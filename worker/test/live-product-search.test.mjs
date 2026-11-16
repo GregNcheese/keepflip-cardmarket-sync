@@ -250,3 +250,56 @@ test('Taiwan traditional Chinese contents verify from matching Shopify JSON even
     assert.equal(out.sources.some(s=>s.url.includes('www.tcghobby.com')),true);
   }finally{globalThis.fetch=original;}
 });
+
+
+test('Korean 151 search includes printing language and accepts the correct online source', async()=>{
+  const input='Pokemon Card 151 Korean Booster Box';
+  assert.deepEqual(searchQueries(input,'box'), ['151 korean booster box','151 korean']);
+  assert.equal(matchesLiveProductTitle(input,'151 Booster Box - Korean Pokémon TCG','box','KR'),true);
+  assert.equal(matchesLiveProductTitle(input,'151 Booster Box - Japanese Pokémon TCG','box','KR'),false);
+  const saved=globalThis.fetch,calls=[];
+  globalThis.fetch=async input=>{
+    const url=String(input);calls.push(url);
+    if(url.includes('api.tcgdex.net'))return new Response('[]',{headers:{'Content-Type':'application/json'}});
+    if(url.includes('/search/suggest.json')){
+      assert.ok(!url.startsWith('https://rarecards.nl'));
+      assert.ok(!url.startsWith('https://www.tcghobby.com'));
+      if(url.startsWith('https://card-binder.com/'))return fakeShopify([
+        {title:'151 Booster Box - Japanese Pokémon TCG',url:'/products/japanese-151'},
+        {title:'151 Korean Booster Box',url:'/products/pokemon-151-korean-booster-box'}
+      ]);
+      return fakeShopify([]);
+    }
+    if(url==='https://card-binder.com/products/pokemon-151-korean-booster-box')
+      return new Response('<html><h1>151 Korean Booster Box</h1></html>',{
+        status:200,headers:{'Content-Type':'text/html'}});
+    if(url==='https://card-binder.com/products/pokemon-151-korean-booster-box.js')
+      return new Response(JSON.stringify({
+        title:'151 Korean Booster Box',
+        description:'<p>Contains 20 booster packs</p><p>Each booster pack contains 7 game cards.</p><p>Card language: Korean.</p>'
+      }),{headers:{'Content-Type':'text/javascript; charset=utf-8'}});
+    return new Response('Not found',{status:404});
+  };
+  try {
+    const response=await worker.fetch(new Request(base+'/lookup',{
+      method:'POST',
+      headers:{Authorization:'Bearer test-token',Origin:base,'Content-Type':'application/json'},
+      body:JSON.stringify({productName:input,productType:'box',language:'KR'})
+    }),{
+      KEEPFLIP_ACCESS_TOKEN:'test-token',
+      APP_ORIGIN:'https://gregncheese.github.io',
+      DIRECT_WEB_DISCOVERY:'true',ENABLE_GOOGLE_SEARCH:'false'
+    });
+    assert.equal(response.status,200);
+    const out=await response.json();
+    assert.equal(out.suggestedCount,20);
+    assert.equal(out.suggestedCardsPerPack,7);
+    assert.equal(out.suggestedLanguage,'KR');
+    assert.equal(out.verifiedFields.boosters,true);
+    assert.equal(out.verifiedFields.cardsPerPack,true);
+    assert.equal(out.verifiedFields.language,true);
+    assert.equal(out.diagnostics.liveDiscovery.matchedProducts,1);
+    assert.ok(out.sources.some(x=>x.url?.includes('card-binder.com/products/pokemon-151-korean-booster-box')));
+    assert.equal(calls.some(u=>u.includes('generativelanguage.googleapis.com')),false);
+  } finally {globalThis.fetch=saved;}
+});
