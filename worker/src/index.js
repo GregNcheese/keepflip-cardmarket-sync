@@ -1,9 +1,10 @@
 import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfidence, explicitCardLanguage } from './autofill.js';
-import { matchingOfficialTitle, selectVerifiedProduct, scopedProductHtml } from './product-identity.js';
+import { matchingOfficialTitle, selectVerifiedProduct, scopedProductHtml, editionCompatible } from './product-identity.js';
+import { discoverProductWithGemini } from './gemini-discovery.js';
 import { extractNameHints } from './name-hints.js';
 
 /**
- * Keep & Flip – Productbronnen Worker 2.1.7 AUTOFILL TEST
+ * Keep & Flip – Productbronnen Worker 2.1.8 GEMINI SEARCH TEST
  *
  * GET /health
  * POST /lookup
@@ -23,7 +24,7 @@ import { extractNameHints } from './name-hints.js';
  * Geen voorraadmutaties.
  * Geen onbewezen gegevens automatisch bevestigen.
  */
-const VERSION = '2.1.7';
+const VERSION = '2.1.8';
 const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 const MAX_BODY = 3500;
 const SET_LANGUAGES = ['en', 'ja', 'ko', 'zh-cn', 'zh-tw'];
@@ -471,6 +472,7 @@ function exactRetailTitleMatches(html, name, type) {
     qualifiers.every(q =>
       !requested.includes(q) || h.includes(q)
     ) &&
+    editionCompatible(name, h) &&
     (type !== 'etb' || h.includes('trainer')) &&
     (type !== 'bundle' || h.includes('bundle'))
   );
@@ -552,118 +554,7 @@ async function fetchRetail(url, env, hops = 0) {
     clearTimeout(timer);
   }
 }
-async function discoverRetailUrls(env, name, type) {
-  if (
-    String(env.ENABLE_GOOGLE_SEARCH || '')
-      .toLowerCase() !== 'true'
-  ) {
-    return {
-      status: 'disabled',
-      urls: [],
-      used: false
-    };
-  }
-  if (!env.GEMINI_API_KEY) {
-    return {
-      status: 'no-key',
-      urls: [],
-      used: false
-    };
-  }
-  const c = new AbortController();
-  const timer = setTimeout(
-    () => c.abort(),
-    11500
-  );
-  try {
-    const model = String(
-      env.GEMINI_MODEL || DEFAULT_MODEL
-    ).trim();
-    if (!/^gemini-[a-z0-9.-]{1,60}$/.test(model)) {
-      return {
-        status: 'invalid-model',
-        urls: [],
-        used: false
-      };
-    }
-    const prompt =
-      'Find up to 3 DIRECT product-page URLs on trustworthy retailers for this exact sealed Pokemon TCG product: ' +
-      JSON.stringify(name) +
-      '; type: ' + type +
-      '. Be exact about edition and language. ' +
-      'Return direct HTTPS product URLs, one per line, no explanation. No category or search pages.';
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: 'POST',
-        signal: c.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': env.GEMINI_API_KEY
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }]
-            }
-          ],
-          tools: [
-            { googleSearch: {} }
-          ],
-          generationConfig: {
-            temperature: 0,
-            maxOutputTokens: 500
-          }
-        })
-      }
-    );
-    if (!r.ok) {
-      return {
-        status: 'http-' + r.status,
-        urls: [],
-        used: false
-      };
-    }
-    const json = await r.json();
-    const candidate = json.candidates?.[0] || {};
-    const grounded =
-      candidate.groundingMetadata?.groundingChunks || [];
-    const raw = (
-      candidate.content?.parts || []
-    )
-      .map(p => p.text || '')
-      .join(' ');
-    const candidateUrls = [
-      ...raw.matchAll(/https:\/\/[^\s<>"'`]+/g)
-    ].map(m =>
-      m[0].replace(/[).,;]+$/, '')
-    );
-    const citationUrls = grounded
-      .map(item => item.web?.uri)
-      .filter(Boolean);
-    return {
-      status: grounded.length
-        ? 'grounded-links'
-        : 'no-grounding',
-      used: grounded.length > 0,
-      urls: [
-        ...new Set(
-          [...citationUrls, ...candidateUrls]
-            .map(u => safeRetailUrl(u, env))
-            .filter(Boolean)
-        )
-      ].slice(0, 4)
-    };
-  } catch {
-    return {
-      status: 'request-failed',
-      urls: [],
-      used: false
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
+
 async function findSet(name, language) {
   const preferred = {
     EN: 'en',
@@ -1317,15 +1208,32 @@ async function lookup(data, env) {
         : []
     )
   ];
+  // Source discovery for unknown sealed products: one grounded Search query
+  // per request at most. AI numbers are ignored; fetched pages prove fields.
+  const discovery = record ? {
+    status: 'skipped-existing-product-record',
+    groundingUsed: false, officialUrls: [], retailUrls: [],
+    searchQueries: [], searchSuggestionsHtml: ''
+  } : await discoverProductWithGemini(
+    env, name, type, language, officialUrl,
+    u => safeRetailUrl(u, env)
+  );
+  out.googleSearchEnabled = String(env.ENABLE_GOOGLE_SEARCH || '').toLowerCase() === 'true';
+  out.groundingUsed = discovery.groundingUsed;
+  out.geminiResponded = discovery.groundingUsed;
+  out.diagnostics.googleDiscovery = {
+    status: discovery.status,
+    officialCandidates: discovery.officialUrls.length,
+    retailerCandidates: discovery.retailUrls.length,
+    queryCount: discovery.searchQueries.length
+  };
+  out.searchSuggestionsHtml = discovery.searchSuggestionsHtml;
   const urls = candidateUrls(
     name,
     [
       ...supplied,
-      ...(
-        record?.url
-          ? [record.url]
-          : []
-      )
+      ...(record?.url ? [record.url] : []),
+      ...discovery.officialUrls
     ]
   );
   if (
@@ -1460,23 +1368,13 @@ async function lookup(data, env) {
         Array.isArray(data.secondarySourceUrls)
           ? data.secondarySourceUrls.slice(0, 3)
           : [];
-      const discovered = await discoverRetailUrls(
-        env,
-        name,
-        type
-      );
-      out.diagnostics.secondarySearch =
-        discovered.status;
-      out.groundingUsed = discovered.used;
-      out.googleSearchEnabled =
-        String(env.ENABLE_GOOGLE_SEARCH || '')
-          .toLowerCase() === 'true';
+      out.diagnostics.secondarySearch = discovery.status;
       const secondaryUrls = [
         ...new Set(
           [
             ...(seed?.urls || []),
             ...providedSecondary,
-            ...discovered.urls
+            ...discovery.retailUrls
           ]
             .map(u => safeRetailUrl(u, env))
             .filter(Boolean)
