@@ -42,3 +42,16 @@ test('Taiwanese retailer formula 1 box = N packs / 1 pack = N cards',()=>{
   assert.equal(countFromText(text,'packs'),30);
   assert.equal(countFromText(text,'cards'),6);
 });
+
+
+test('Gem Pack Vol. 7 set number is not box count; named Shopify formula gives 15 x 4',()=>{
+  const desc='Gem Pack Vol. 7 CBB7C. Content 1 box = 15× Gem Pack Vol. 7 Booster Packs. 1 pack = 4× Guaranteed Holo Foil Cards per Pack (60 all-foil cards per box).';
+  assert.equal(countFromText(desc,'packs'),15);
+  assert.equal(countFromText(desc,'cards'),4);
+});
+
+test('series number standing before Booster Packs cannot be accepted as quantity',()=>{
+  assert.equal(countFromText('Gem Pack Vol. 7 Booster Packs','packs'),null);
+  assert.equal(countFromText('Series 9 Booster Packs now shipping','packs'),null);
+  assert.equal(countFromText('1 box = 20× Pokemon Card 151 Booster Packs','packs'),20);
+});
