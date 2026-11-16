@@ -1,5 +1,6 @@
 import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfidence, explicitCardLanguage } from './autofill.js';
 import { matchingOfficialTitle, selectVerifiedProduct, scopedProductHtml } from './product-identity.js';
+import { extractNameHints } from './name-hints.js';
 
 /**
  * Keep & Flip – Productbronnen Worker 2.1.7 AUTOFILL TEST
@@ -832,7 +833,9 @@ function initialResult(name, type) {
     },
     provisionalFields: {
       cardsPerPack: false,
-      productType: false
+      productType: false,
+      boosters: false,
+      language: false
     },
     searchSuggestionsHtml: '',
     productName: name,
@@ -1556,10 +1559,54 @@ async function lookup(data, env) {
       );
     }
   }
+  // Name counts help users enter missing fields but are NEVER source verified.
+  const hints = extractNameHints(name);
+  const sourceConflict = key => (out.diagnostics.conflicts || []).some(c => c.field === key);
+  const hintConflicts = [];
+  if (hints.boosters && type !== 'pack' && type !== 'other') {
+    if (out.verifiedFields.boosters && hints.boosters !== out.suggestedCount)
+      hintConflicts.push({field: 'boosters', fromName: hints.boosters, fromSource: out.suggestedCount});
+    else if (!out.verifiedFields.boosters && !sourceConflict('boosters') && !out.suggestedCount) {
+      out.suggestedCount = hints.boosters;
+      out.provisionalFields.boosters = true;
+      out.evidence.packCount = 'product-name-hint-unverified';
+    }
+  }
+  if (hints.cardsPerPack) {
+    if (out.verifiedFields.cardsPerPack && hints.cardsPerPack !== out.suggestedCardsPerPack)
+      hintConflicts.push({field: 'cardsPerPack', fromName: hints.cardsPerPack, fromSource: out.suggestedCardsPerPack});
+    else if (!out.verifiedFields.cardsPerPack && !sourceConflict('cardsPerPack')) {
+      out.suggestedCardsPerPack = hints.cardsPerPack;
+      out.provisionalFields.cardsPerPack = true;
+      out.evidence.cardsPerPack = 'product-name-hint-unverified';
+    }
+  }
+  if (hints.language) {
+    if (language && hints.language !== language) {
+      hintConflicts.push({field: 'language', fromName: hints.language, fromInput: language});
+    } else if (out.verifiedFields.language && hints.language !== out.suggestedLanguage) {
+      hintConflicts.push({field: 'language', fromName: hints.language, fromSource: out.suggestedLanguage});
+    } else if (!out.verifiedFields.language && !sourceConflict('language') && !out.suggestedLanguage) {
+      out.suggestedLanguage = hints.language;
+      out.provisionalFields.language = true;
+      out.evidence.language = 'product-name-hint-unverified';
+    }
+  }
+  if (hintConflicts.length) out.diagnostics.nameHintConflicts = hintConflicts;
+  if (out.provisionalFields.boosters || out.provisionalFields.language ||
+      out.evidence.cardsPerPack === 'product-name-hint-unverified') {
+    out.diagnostics.nameHints = {
+      boosters: out.provisionalFields.boosters ? hints.boosters : null,
+      cardsPerPack: out.evidence.cardsPerPack === 'product-name-hint-unverified' ? hints.cardsPerPack : null,
+      language: out.provisionalFields.language ? hints.language : null
+    };
+  }
+
   // A loose booster is one purchased product: not a package with a booster-count field.
   const requiresBoosterCount = type !== 'pack';
   const hasConflicts = (out.diagnostics.conflicts || []).length > 0;
   const ambiguousRegistry = out.diagnostics.registryStatus === 'ambiguous';
+  const hasNameHintConflicts = hintConflicts.length > 0;
   out.sourceVerified = !!(
     (requiresBoosterCount && out.verifiedFields.boosters) ||
     out.verifiedFields.cardsPerPack
@@ -1577,7 +1624,8 @@ async function lookup(data, env) {
     out.verifiedFields.language &&
     out.verifiedFields.productType &&
     !hasConflicts &&
-    !ambiguousRegistry
+    !ambiguousRegistry &&
+    !hasNameHintConflicts
       ? 'match'
       : (
           out.sourceVerified ||
@@ -1589,7 +1637,7 @@ async function lookup(data, env) {
     requiresBoosterCount && !out.verifiedFields.boosters && 'boosters',
     !out.verifiedFields.cardsPerPack &&
       'cardsPerPack',
-    !out.suggestedLanguage && 'language',
+    !out.verifiedFields.language && 'language',
     !out.suggestedSet && 'set'
   ].filter(Boolean);
   if (hasConflicts) {
@@ -1598,11 +1646,17 @@ async function lookup(data, env) {
   } else if (ambiguousRegistry) {
     out.warning = 'Meerdere uitvoeringen komen overeen met de opgegeven naam. Kies de exacte uitvoering; autofill is niet bevestigd.';
     out.status = 'needs-review';
+  } else if (hasNameHintConflicts) {
+    out.warning = 'De productnaam wijkt af van de bevestigde bron of ingevoerde taal. Controleer de uitvoering.';
+    out.status = 'needs-review';
   } else if (out.missingFields.length) {
     out.warning =
-      out.provisionalFields.cardsPerPack
-        ? '10 kaarten is een voorlopig voorstel op basis van de officiële Amerikaanse boosterregel; bevestiging vereist.'
-        : 'Niet alle velden zijn exact bewezen; ontbrekende waarden blijven leeg.';
+      out.provisionalFields.boosters || out.provisionalFields.language ||
+      out.evidence.cardsPerPack === 'product-name-hint-unverified'
+        ? 'Productnaam bevat voorlopige autofillvoorstellen. Controleer aantal, taal en uitvoering.'
+        : out.provisionalFields.cardsPerPack
+          ? '10 kaarten is een voorlopig voorstel op basis van de officiële Amerikaanse boosterregel; bevestiging vereist.'
+          : 'Niet alle velden zijn exact bewezen; ontbrekende waarden blijven leeg.';
   }
   return out;
 }
