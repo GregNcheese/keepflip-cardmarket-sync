@@ -55,6 +55,7 @@ a{color:#91e8ff;overflow-wrap:anywhere}.source .small{color:var(--muted)}summary
           <option data-name="Pokemon Card 151 Japanese Booster Box" data-type="box" data-language="JP">Pokémon Card 151 · Booster Box (JP)</option>
           <option data-name="Pokemon Card 151 Korean Booster Box" data-type="box" data-language="KR">Pokémon Card 151 · Booster Box (KR)</option>
           <option data-name="Pokemon TCG Simplified Chinese Gem Pack Vol 1 Booster Box" data-type="box" data-language="ZH-CN">Gem Pack Vol. 1 · Box (ZH-CN)</option>
+          <option data-name="Pokemon Glory of Team Rocket sv10 Traditional Chinese Booster Box" data-type="box" data-language="ZH-TW">Glory of Team Rocket · Box (ZH-TW)</option>
         </select></div>
         <div class="field"><label for="productName">Exacte productnaam</label><input id="productName" maxlength="150" required></div>
         <div class="two">
