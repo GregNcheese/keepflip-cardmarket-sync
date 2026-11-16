@@ -1,4 +1,6 @@
 import { discoverLiveProductPages, matchesLiveProductTitle } from './live-product-search.js';
+import { discoverCardos, cardosUsage, cardosSearch, cardosGetProduct } from './cardos.js';
+import { renderCardosLab } from './cardos-lab.js';
 import { renderTestLab } from './testlab.js';
 import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfidence, explicitCardLanguage } from './autofill.js';
 import { matchingOfficialTitle, selectVerifiedProduct, scopedProductHtml, editionCompatible } from './product-identity.js';
@@ -1293,13 +1295,59 @@ async function lookup(data, env) {
       'product-reference'
     );
   }
+  // CardOS is the primary exact sealed-product source when its Cloudflare
+  // secret is configured. It uses only public product name/type/language.
+  // On 402/403/429/5xx/no-match/incomplete fields the existing catalog,
+  // Gemini and storefront fallbacks continue unchanged.
+  const cardosResult = record
+    ? { status:'skipped-existing-record' }
+    : await discoverCardos(env, name, type, language);
+  out.diagnostics.cardos = {
+    status:cardosResult.status,
+    creditsRemaining:cardosResult.creditsRemaining ?? null,
+    creditsCost:cardosResult.creditsCost ?? null,
+    searchResultCount:cardosResult.searchResultCount ?? null,
+    candidates:cardosResult.candidates?.slice(0,5).map(p=>({
+      id:p.id,name:p.name,productType:p.productType,language:p.language
+    })) || []
+  };
+  if(cardosResult.status==='matched' && cardosResult.product) {
+    const p = cardosResult.product;
+    const sourceUrl = 'https://service.rip.fun/api/v1/pokemon/sealed/' +
+      encodeURIComponent(p.id);
+    out.cardos = {
+      product:{ ...p }, // public catalog metadata only; no secret or raw headers
+      sourceUrl
+    };
+    if (p.productType === type) {
+      out.verifiedFields.productType = true;
+      out.provisionalFields.productType = false;
+      out.suggestedProductType = type;
+      out.evidence.productType = 'cardos-product-exact-match';
+    }
+    applyField(out, 'boosters', p.packCount,
+      'cardos-sealed-api',sourceUrl,'CardOS sealed product API','cardos-product');
+    applyField(out, 'cardsPerPack', p.cardsPerPack,
+      'cardos-sealed-api',sourceUrl,'CardOS sealed product API','cardos-product');
+    applyField(out, 'language', p.language,
+      'cardos-sealed-api',sourceUrl,'CardOS sealed product API','cardos-product');
+    applyField(out, 'set', p.set,
+      'cardos-sealed-api',sourceUrl,'CardOS sealed product API','cardos-product');
+  }
+  const completeCardos = !!(
+    out.verifiedFields.cardsPerPack &&
+    (type==='pack' || out.verifiedFields.boosters) &&
+    out.verifiedFields.language &&
+    out.verifiedFields.set &&
+    out.verifiedFields.productType
+  );
   // Search the public web and TCGdex concurrently where available.
   // This avoids making users wait for five set-catalog calls before Search.
-  const livePromise = record ? null :
+  const livePromise = record || completeCardos ? null :
     discoverLiveProductPages(env, name, type, language);
   // Direct source lookup is the default in the preview. Paid Google-grounding
   // is NOT called when DIRECT_WEB_DISCOVERY is enabled.
-  const discoveryPromise = record ||
+  const discoveryPromise = record || completeCardos ||
     String(env.DIRECT_WEB_DISCOVERY || '').toLowerCase() === 'true'
     ? null : discoverProductWithGemini(
       env, name, type, language, officialUrl, u => safeRetailUrl(u, env)
@@ -1369,11 +1417,14 @@ async function lookup(data, env) {
     ]
   );
   if (
-    !record ||
-    !out.suggestedCount ||
-    !out.suggestedCardsPerPack ||
-    !out.suggestedLanguage ||
-    !out.suggestedSet
+    !completeCardos &&
+    (
+      !record ||
+      !out.suggestedCount ||
+      !out.suggestedCardsPerPack ||
+      !out.suggestedLanguage ||
+      !out.suggestedSet
+    )
   ) {
     const checked = await Promise.all(
       urls.map(url => fetchOfficial(url))
@@ -1990,6 +2041,20 @@ export default {
   async fetch(request, env) {
     const path = new URL(request.url).pathname;
     const origin = allowedOrigin(request, env);
+    if (request.method === 'GET' && path === '/cardos-lab') {
+      return new Response(renderCardosLab(), {
+        status:200,
+        headers: {
+          'Content-Type':'text/html; charset=utf-8',
+          'Cache-Control':'no-store',
+          'X-Content-Type-Options':'nosniff',
+          'X-Robots-Tag':'noindex, nofollow',
+          'Referrer-Policy':'no-referrer',
+          'X-Frame-Options':'DENY',
+          'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src https://api.rip.fun https://api.getcardos.com https://gjnrvwqtdlspyfpezgox.supabase.co; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+        }
+      });
+    }
     if (request.method === 'GET' && path === '/testlab') {
       return new Response(renderTestLab(), {
         status: 200,
@@ -2018,6 +2083,7 @@ export default {
           env.GEMINI_MODEL || DEFAULT_MODEL,
         geminiConfigured:
           !!env.GEMINI_API_KEY,
+        cardosConfigured: !!env.CARDOS_API_KEY,
         accessConfigured:
           !!env.KEEPFLIP_ACCESS_TOKEN,
         registryConfigured:
@@ -2030,7 +2096,7 @@ export default {
     }
     if (
       request.method === 'OPTIONS' &&
-      (path === '/lookup' || path === '/image-lookup' || path === '/image')
+      (path === '/lookup' || path === '/image-lookup' || path === '/image' || path === '/cardos/test')
     ) {
       if (!origin) {
         return reply({
@@ -2051,7 +2117,7 @@ export default {
       });
     }
     if (
-      !(request.method === 'POST' && (path === '/lookup' || path === '/image-lookup')) &&
+      !(request.method === 'POST' && (path === '/lookup' || path === '/image-lookup' || path === '/cardos/test')) &&
       !(request.method === 'GET' && path === '/image')
     ) {
       return reply({
@@ -2111,6 +2177,22 @@ export default {
         return reply({
           error: 'Ongeldige JSON'
         }, 400, origin);
+      }
+      if(path === '/cardos/test') {
+        const action = String(data?.action || '');
+        let info;
+        if(action==='usage') info = await cardosUsage(env);
+        else if(action==='search') info = await cardosSearch(
+          env,String(data?.productName||'').slice(0,150),
+          String(data?.productType||'box'),
+          languageCode(data?.language)
+        );
+        else if(action==='get') info = await cardosGetProduct(
+          env,String(data?.productId||'').slice(0,110)
+        );
+        else return reply({error:'Ongeldige CardOS-testactie'},400,origin);
+        // A safe diagnostic response only; never forward CardOS error bodies.
+        return reply(info,200,origin);
       }
       const out = path === '/image-lookup'
         ? await imageLookup(data, env)
