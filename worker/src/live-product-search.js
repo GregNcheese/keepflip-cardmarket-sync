@@ -11,6 +11,21 @@ const STORES = Object.freeze([
   { name: 'CardNation', origin: 'https://www.cardnation.nl', locale: '' },
   { name: 'TCGHOBBY Taiwan', origin: 'https://www.tcghobby.com', locale: 'en-gb' }
 ]);
+// The public storefront search endpoints below were verified with live
+// HTTP requests. They provide search RESULTS, not a local product database.
+// For Korean cards, prioritize retailers that actually carry Korean printings
+// instead of retrying blocked Japanese/Chinese-oriented stores.
+const KOREAN_STORES = Object.freeze([
+  { name: 'Card-Binder', origin: 'https://card-binder.com', locale: '' },
+  { name: 'Pikamon', origin: 'https://pikamon.eu', locale: 'en-eu' },
+  { name: 'Danireon', origin: 'https://www.danireon.com', locale: 'en-us' },
+  { name: 'GC Hobby', origin: 'https://gchobby.com', locale: '' }
+]);
+function selectedStores(name, language) {
+  const t = normal(name);
+  return language === 'KR' || /\b(?:korean|kr)\b/.test(t)
+    ? KOREAN_STORES : STORES;
+}
 
 function normal(value) {
   return String(value || '')
@@ -150,11 +165,12 @@ export async function discoverLiveProductPages(env, name, type, language) {
   if (String(env?.DIRECT_WEB_DISCOVERY || '').toLowerCase() !== 'true') return empty;
   const queries = searchQueries(name, type);
   if (!queries.length) return { ...empty, status:'insufficient-name' };
-  const first = await Promise.all(STORES.map(s => fetchSuggestions(s, queries[0])));
+  const shops = selectedStores(name, language);
+  const first = await Promise.all(shops.map(s => fetchSuggestions(s, queries[0])));
   const matched = [];
   const diagnostic = [];
   first.forEach((r,i) => {
-    const shop=STORES[i];
+    const shop=shops[i];
     diagnostic.push({ source:shop.name, status:r.status, candidates:r.items.length });
     for (const item of r.items) {
       if (matchesLiveProductTitle(name,item.title,type,language))
@@ -163,9 +179,9 @@ export async function discoverLiveProductPages(env, name, type, language) {
   });
   // One broad search per store only when the precise query found no matches.
   if (!matched.length && queries[1] && queries[1] !== queries[0]) {
-    const fallback = await Promise.all(STORES.map(s => fetchSuggestions(s, queries[1])));
+    const fallback = await Promise.all(shops.map(s => fetchSuggestions(s, queries[1])));
     fallback.forEach((r,i) => {
-      diagnostic.push({ source:STORES[i].name, status:'broad-'+r.status, candidates:r.items.length });
+      diagnostic.push({ source:shops[i].name, status:'broad-'+r.status, candidates:r.items.length });
       for (const item of r.items) {
         if (matchesLiveProductTitle(name,item.title,type,language))
           matched.push({ ...item, store:STORES[i].name });
