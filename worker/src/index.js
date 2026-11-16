@@ -1182,6 +1182,11 @@ async function lookup(data, env) {
       'product-reference'
     );
   }
+  // Search the public web and TCGdex concurrently where available.
+  // This avoids making users wait for five set-catalog calls before Search.
+  const discoveryPromise = record ? null : discoverProductWithGemini(
+    env, name, type, language, officialUrl, u => safeRetailUrl(u, env)
+  );
   if (!out.suggestedSet) {
     const set = await findSet(name, language);
     if (set) {
@@ -1214,10 +1219,7 @@ async function lookup(data, env) {
     status: 'skipped-existing-product-record',
     groundingUsed: false, officialUrls: [], retailUrls: [],
     searchQueries: [], searchSuggestionsHtml: ''
-  } : await discoverProductWithGemini(
-    env, name, type, language, officialUrl,
-    u => safeRetailUrl(u, env)
-  );
+  } : await discoveryPromise;
   out.googleSearchEnabled = String(env.ENABLE_GOOGLE_SEARCH || '').toLowerCase() === 'true';
   out.groundingUsed = discovery.groundingUsed;
   out.geminiResponded = discovery.groundingUsed;
