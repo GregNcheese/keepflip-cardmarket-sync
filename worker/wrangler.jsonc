@@ -15,7 +15,8 @@
       // GitHub Pages browser origin (not the repository pathname).
       "APP_ORIGIN": "https://gregncheese.github.io",
       // No Google Search calls or unexpected costs during initial preview tests.
-      "ENABLE_GOOGLE_SEARCH": "false"
+      "ENABLE_GOOGLE_SEARCH": "false",
+      "KEEPFLIP_REGISTRY_URL": "https://raw.githubusercontent.com/GregNcheese/keepflip-cardmarket-sync/refs/heads/test/cloudflare-worker-autofill-216-fresh-preview/worker/data/verified-products-starter.json"
     }
   }
 }
