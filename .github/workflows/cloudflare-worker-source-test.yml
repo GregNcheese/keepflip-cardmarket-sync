@@ -39,4 +39,8 @@ jobs:
         if: github.ref == 'refs/heads/test/cloudflare-worker-gemini-autofill-218'
         continue-on-error: true
         run: node worker/scripts/live-lookup-probe.mjs
+      - name: Diagnostic Korean sealed product coverage (no external secrets)
+        if: github.ref == 'refs/heads/test/cloudflare-worker-gemini-autofill-218'
+        continue-on-error: true
+        run: node worker/scripts/korean-lookup-probe.mjs
 # No Cloudflare API token, production deployment, or secrets involved.
