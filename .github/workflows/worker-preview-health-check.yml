@@ -32,7 +32,8 @@ jobs:
                       'online': data.get('status')=='online',
                       'access-secret-configured': data.get('accessConfigured') is True,
                       'registry-url-configured': data.get('registryConfigured') is True,
-                      'google-search-enabled-in-preview': data.get('googleSearchEnabled') is True,
+                      'live-search-enabled-in-preview': data.get('liveSearchEnabled') is True,
+                      'paid-google-search-disabled': data.get('googleSearchEnabled') is False,
                   }
                   print('Preview health:', {k: bool(v) for k,v in checks.items()})
                   print('Gemini secret configured:', bool(data.get('geminiConfigured')))  # no secret value
