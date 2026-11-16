@@ -1,0 +1,71 @@
+name: Keep & Flip - Photo and Identity Quality 2.21.12 TEST
+on:
+  push:
+    branches:
+      - test/quality-images-22112
+    paths:
+      - scripts/build_quality_audit.py
+      - tests/test_quality_audit.py
+      - config/quality_watchlist.json
+      - .github/workflows/quality-images-22112.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: keepflip-quality-images-22112
+  cancel-in-progress: false
+jobs:
+  image-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout isolated test branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run offline image and identity regression tests
+        run: python -m unittest discover -s tests -p 'test_quality_audit.py' -v
+      - name: Scan public regression cards against live sources
+        run: python scripts/build_quality_audit.py
+      - name: Verify safely labeled outputs
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          base=Path('test-data/quality-22112')
+          audit=json.loads((base/'quality-audit.json').read_text(encoding='utf8'))
+          coverage=json.loads((base/'coverage-report.json').read_text(encoding='utf8'))
+          assert audit['schema']=='keepflip-quality-audit-v1'
+          assert coverage['schema']=='keepflip-quality-coverage-v1'
+          assert len(audit['results'])==7
+          assert audit['summary']['autoPricesWritten']==0
+          assert set(coverage['languages'])=={'en','ja','ko','zh-cn','zh-tw'}
+          for row in audit['results']:
+              assert row['canAutoPrice'] is False
+              if row['image']['status']=='asset-verified':
+                  assert row['image']['url'].startswith('https://assets.tcgdex.net/')
+              print(row['label'],row['image']['status'],row['product']['status'])
+          print('IMAGE SUMMARY',audit['summary'])
+          print('COVERAGE',[(k,v['setsWithoutCards'],v['cardsWithoutImageUrl']) for k,v in coverage['languages'].items()])
+          PY
+      - name: Commit read-only quality reports to TEST branch only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add test-data/quality-22112/
+          if ! git diff --cached --quiet; then
+            git commit -m 'test data: update photo and identity quality audit [skip ci]'
+            git push origin HEAD:test/quality-images-22112
+          fi
+      - name: Upload independent report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: keepflip-photo-quality-22112
+          path: test-data/quality-22112/
+          retention-days: 14
+          if-no-files-found: error
+# No public Pages deployment and no private Keep & Flip collection data.
