@@ -125,3 +125,36 @@ test('Vision route stays protected, ordinary endpoints unchanged, file-origin pr
     assert.equal((await health.json()).cardosVisionAvailable,true);
   }finally{globalThis.fetch=original}
 });
+
+
+test('CardOS Vision CORS preflight supports only authenticated test preview origins',async()=>{
+  const req=origin=>new Request(base+'/cardos/vision',{
+    method:'OPTIONS',
+    headers:{Origin:origin,'Access-Control-Request-Method':'POST',
+      'Access-Control-Request-Headers':'Authorization,Content-Type'}
+  });
+  const locked=await worker.fetch(req('null'),env);
+  assert.equal(locked.status,403);
+  const allowed=await worker.fetch(req('null'),{
+    ...env,CARDOS_TEST_ALLOW_FILE_ORIGIN:'true'
+  });
+  assert.equal(allowed.status,204);
+  assert.equal(allowed.headers.get('Access-Control-Allow-Origin'),'null');
+  const denied=await worker.fetch(req('https://evil.example'),{
+    ...env,CARDOS_TEST_ALLOW_FILE_ORIGIN:'true'
+  });
+  assert.equal(denied.status,403);
+});
+
+test('CardOS Vision enforces a larger but bounded photo payload without touching standard lookup limit',async()=>{
+  const request=new Request(base+'/cardos/vision',{
+    method:'POST',
+    headers:{
+      Authorization:'Bearer test-token',Origin:base,
+      'Content-Type':'application/json','Content-Length':'14100001'
+    },
+    body:JSON.stringify(body)
+  });
+  const response=await worker.fetch(request,env);
+  assert.equal(response.status,413);
+});
