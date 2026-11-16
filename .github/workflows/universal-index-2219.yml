@@ -1,0 +1,76 @@
+name: Keep & Flip - Universal Card Index 2.21.9 TEST
+
+on:
+  push:
+    branches:
+      - test/universal-card-index-2219
+    paths:
+      - scripts/build_universal_index.py
+      - tests/test_universal_index.py
+      - .github/workflows/universal-index-2219.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: keepflip-universal-2219
+  cancel-in-progress: false
+
+jobs:
+  universal-index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout test branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test catalogue builder offline
+        run: python -m unittest discover -s tests -p "test_universal_index.py" -v
+      - name: Build five-language TCGdex card catalogue
+        run: python scripts/build_universal_index.py
+      - name: Validate generated catalogue
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          base=Path('test-data/universal-2219')
+          manifest=json.loads((base/'universal-manifest.json').read_text())
+          assert manifest['schema']=='keepflip-universal-index-v1'
+          assert set(manifest['languages'])=={'en','ja','ko','zh-cn','zh-tw'}
+          for lang,entry in manifest['languages'].items():
+              doc=json.loads((base/entry['file']).read_text())
+              assert doc['schema']=='keepflip-universal-cards-v1'
+              assert doc['language']==lang
+              assert len(doc['cards'])==entry['cards']
+              print(lang, entry['cards'], 'cards', entry['sets'], 'sets', entry['state'])
+          assert manifest['languages']['en']['cards'] > 1000
+          assert manifest['languages']['ja']['cards'] > 1000
+          PY
+      - name: Publish test snapshot to test branch only
+        if: github.ref == 'refs/heads/test/universal-card-index-2219'
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add test-data/universal-2219/
+          if git diff --cached --quiet; then
+            echo "Already current"
+          else
+            git commit -m "test data: refresh five-language TCGdex discovery snapshot [skip ci]"
+            git push origin HEAD:test/universal-card-index-2219
+          fi
+      - name: Upload independent test data artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: keepflip-universal-2219
+          path: test-data/universal-2219
+          if-no-files-found: error
+          retention-days: 14
+
+# Does NOT modify 'main', deploy GitHub Pages, or read personal Keep & Flip data.
