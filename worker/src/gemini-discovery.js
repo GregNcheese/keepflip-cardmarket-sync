@@ -52,6 +52,63 @@ export function parseGroundedProductUrls(response, isOfficial, isRetail) {
   };
 }
 
+/**
+ * Extract only safe, bounded diagnostic categories from Gemini's error response.
+ * Never return free-text Google error bodies, headers, request prompts or keys.
+ */
+async function failureDetails(response) {
+  let error = null;
+  try {
+    const body = await response.json();
+    error = body?.error || null;
+  } catch { /* empty or invalid API error response */ }
+
+  const status = typeof error?.status === 'string' &&
+    /^[A-Z_]{1,45}$/.test(error.status) ? error.status : null;
+  const details = Array.isArray(error?.details) ? error.details.slice(0, 10) : [];
+  const quota = details.find(d =>
+    String(d?.['@type'] || '').endsWith('google.rpc.QuotaFailure')
+  );
+  const violations = Array.isArray(quota?.violations) ? quota.violations.slice(0, 6) : [];
+  const quotaText = violations.map(x =>
+    [x?.quotaId, x?.quotaDimensions?.model, x?.description, x?.subject].join(' ')
+  ).join(' ').toLowerCase();
+  const message = String(error?.message || '').slice(0, 800).toLowerCase();
+  const reason = String(
+    details.find(d => String(d?.['@type'] || '').endsWith('google.rpc.ErrorInfo'))?.reason ||
+    error?.errors?.[0]?.reason || ''
+  ).toLowerCase();
+  let category = null;
+  if (response.status === 429) {
+    category = /grounding|google.search|search.query/.test(quotaText) ?
+      'search-grounding-quota' :
+      /perday|per_day|daily|requestsperday/.test(quotaText) ?
+      'daily-quota' :
+      /perminute|per_minute|per.second|persecond|requestsperminute/.test(quotaText) ?
+      'rate-limit' :
+      /billing|balance|spend|payment/.test(quotaText + ' ' + message) ?
+      'billing-or-spend-cap' :
+      /quota.exceed|resource.exhaust|rate.limit/.test(message + ' ' + reason) ?
+      'quota-or-rate-limit' : 'unspecified-429';
+  }
+  // Google may report an explicit RetryInfo or Retry-After. Do not invent a delay.
+  const retryInfo = details.find(d =>
+    String(d?.['@type'] || '').endsWith('google.rpc.RetryInfo')
+  );
+  const retryDelay = String(retryInfo?.retryDelay || '');
+  const retryHeader = String(response.headers.get('Retry-After') || '');
+  const seconds = /^\d+(?:\.\d+)?s$/.test(retryDelay) ?
+    Number.parseFloat(retryDelay) :
+    /^\d+$/.test(retryHeader) ? Number(retryHeader) : null;
+  const retryAfterSeconds = seconds !== null && Number.isFinite(seconds) &&
+    seconds >= 0 && seconds <= 86400 ? Math.ceil(seconds) : null;
+  return {
+    errorStatus: status,
+    errorCategory: category,
+    retryAfterSeconds
+  };
+}
+
 export async function discoverProductWithGemini(
   env, name, type, requestedLanguage, isOfficial, isRetail
 ) {
@@ -88,7 +145,10 @@ export async function discoverProductWithGemini(
         generationConfig:{temperature:0,maxOutputTokens:850}
       })
     });
-    if (!response.ok) return empty('gemini-http-'+response.status);
+    if (!response.ok) {
+      const diagnostic = await failureDetails(response);
+      return { ...empty('gemini-http-' + response.status), ...diagnostic };
+    }
     return parseGroundedProductUrls(await response.json(),isOfficial,isRetail);
   } catch { return empty('request-failed'); }
   finally { clearTimeout(timeout); }
