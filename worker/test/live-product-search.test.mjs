@@ -21,6 +21,10 @@ test('strict live matching supports JP and CN without mixing EN or Pokemon Cente
     'Pokémon (JP) Gem Pack Vol.1: Booster Box','box','ZH-CN'), false);
   assert.equal(matchesLiveProductTitle('151 Japanese Booster Box', '151 JP Booster Box (no shrink)', 'box','JP'),false);
   assert.equal(matchesLiveProductTitle('151 Japanese Booster Box', '151 JP Booster Box Case', 'box','JP'),false);
+  assert.equal(matchesLiveProductTitle('Pokemon Glory of Team Rocket Booster Box',
+    '[Traditional Chinese] Pokémon Glory of Team Rocket sv10 Booster Box','box','ZH-TW'),true);
+  assert.equal(matchesLiveProductTitle('Pokemon Glory of Team Rocket Booster Box',
+    '[Traditional Chinese] Pokémon Glory of Team Rocket sv10 Booster Box','box','ZH-CN'),false);
   assert.equal(matchesLiveProductTitle('Paldean Fates Booster Bundle',
     'Paldean Fates Booster Bundle Display','bundle','EN'), false);
 });
@@ -55,7 +59,7 @@ test('Shopify public search returns exact candidate URL without a new API key', 
     const r=await discoverLiveProductPages({DIRECT_WEB_DISCOVERY:'true'},jpName,'box','JP');
     assert.deepEqual(r.retailUrls,[jpUrl]);
     assert.equal(r.status,'candidates-found');
-    assert.equal(called.length,2);
+    assert.equal(called.length,3);
     assert.equal(called.every(x=>x.includes('search/suggest.json')),true);
   } finally {globalThis.fetch=orig;}
 });

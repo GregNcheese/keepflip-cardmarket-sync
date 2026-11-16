@@ -64,6 +64,7 @@ const RETAIL_DOMAINS = new Set([
   'www.cardmarket.com',
   'rarecards.nl',
   'www.rarecards.nl',
+  'www.tcghobby.com',
   'tcgplayer.com',
   'www.tcgplayer.com'
 ]);
@@ -354,12 +355,14 @@ function countFromText(text, type) {
     patterns.push(
       /\b(?:number of|aantal)\s+(?:booster\s*)?packs?\s+per\s+(?:box|doos)\s*[:：–-]?\s*(\d{1,3})\b/gi,
       /\b(?:number of|aantal)\s+boosters?\s+per\s+(?:box|doos)\s*[:：–-]?\s*(\d{1,3})\b/gi,
-      /\b(?:inhoud|contents?)\s*[:：]\s*(\d{1,3})\s+booster\s*packs?\s+per\s+box\b/gi
+      /\b(?:inhoud|contents?)\s*[:：]\s*(\d{1,3})\s+booster\s*packs?\s+per\s+box\b/gi,
+      /\b(?:1\s*)?box\s*[:=]\s*(\d{1,3})\s*(?:booster\s*)?packs?\b/gi
     );
   } else {
     patterns.push(
       /\b(?:number of|aantal)\s+(?:kaarten|cards?)\s+per\s+(?:booster\s*)?pack\s*[:：–-]?\s*(\d{1,3})\b/gi,
-      /\b(?:aantal|number of)\s+(?:kaarten|cards?)\s+per\s+booster\s*[:：–-]?\s*(\d{1,3})\b/gi
+      /\b(?:aantal|number of)\s+(?:kaarten|cards?)\s+per\s+booster\s*[:：–-]?\s*(\d{1,3})\b/gi,
+      /\b(?:1\s*)?(?:booster\s*)?pack\s*[:=]\s*(\d{1,3})\s*(?:game\s*)?cards?\b/gi
     );
   }
   const numbers = [];
@@ -511,7 +514,7 @@ function sameRetailProduct(left, right) {
     const a = new URL(left);
     const b = new URL(right);
     const canonical = u => u.pathname
-      .replace(/^\/(?:en|nl|de|fr)\/products\//, '/products/')
+      .replace(/^\/(?:en(?:-gb)?|nl|de|fr|zh)\/products\//, '/products/')
       .replace(/\/$/, '');
     return a.protocol === 'https:' &&
       a.origin === b.origin && canonical(a) === canonical(b);
@@ -520,14 +523,27 @@ function sameRetailProduct(left, right) {
 // Shopify's documented public Ajax Product API: /products/{handle}.js.
 // Use it only after a storefront result AND the actual product page have
 // passed exact identity checks. This is not a product list or scraper feed.
+
+// Product JSON contains merchant's own product details, not general website
+// language. Accept its explicit "Language Traditional Chinese" label, while
+// preserving the strict card-language rules for broad website HTML.
+function productJsonCardLanguage(text) {
+  const direct = productLanguageFromText(text);
+  const labels = [...String(text || '').matchAll(
+    /\blanguage\s*[:：–-]?\s*(traditional chinese|simplified chinese|english|japanese|korean)\b/gi
+  )].map(m => productLanguageFromText('card ' + m[0])).filter(Boolean);
+  const all = [...new Set([direct, ...labels].filter(Boolean))];
+  return all.length === 1 ? all[0] : null;
+}
+
 async function fetchLiveProductJson(sourceUrl, name, type, language) {
   let url;
   try {
     const source = new URL(sourceUrl);
-    if (!['rarecards.nl', 'www.cardnation.nl'].includes(source.hostname) ||
+    if (!['rarecards.nl', 'www.cardnation.nl', 'www.tcghobby.com'].includes(source.hostname) ||
       source.protocol !== 'https:' || source.port ||
       source.username || source.password) return { status:'invalid-host' };
-    const match = source.pathname.match(/^\/(?:[a-z]{2}\/)?products\/([a-z0-9-]{2,150})\/?$/i);
+    const match = source.pathname.match(/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?products\/([a-z0-9-]{2,150})\/?$/i);
     if (!match) return { status:'invalid-product-path' };
     url = source.origin + '/products/' + match[1] + '.js';
   } catch { return { status:'invalid-url' }; }
@@ -1539,7 +1555,9 @@ async function lookup(data, env) {
           ? json.text : text;
         const packs = countFromText(productText, 'packs');
         const cards = countFromText(productText, 'cards');
-        const lang = productLanguageFromText(productText);
+        const lang = json.status === 'verified-title'
+          ? productJsonCardLanguage(productText)
+          : productLanguageFromText(productText);
         applyField(
           out,
           'boosters',

@@ -35,3 +35,10 @@ test('large or unrelated quantities remain unconfirmed', () => {
   assert.equal(countFromText('80 booster packs', 'packs'), null);
   assert.equal(countFromText('65 cards per booster pack', 'cards'), null);
 });
+
+
+test('Taiwanese retailer formula 1 box = N packs / 1 pack = N cards',()=>{
+  const text='Language Traditional Chinese Content 1 box = 30 packs 1 pack = 6 cards';
+  assert.equal(countFromText(text,'packs'),30);
+  assert.equal(countFromText(text,'cards'),6);
+});

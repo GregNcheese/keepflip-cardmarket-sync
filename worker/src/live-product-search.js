@@ -8,7 +8,8 @@
  */
 const STORES = Object.freeze([
   { name: 'RareCards', origin: 'https://rarecards.nl', locale: 'en' },
-  { name: 'CardNation', origin: 'https://www.cardnation.nl', locale: '' }
+  { name: 'CardNation', origin: 'https://www.cardnation.nl', locale: '' },
+  { name: 'TCGHOBBY Taiwan', origin: 'https://www.tcghobby.com', locale: 'en-gb' }
 ]);
 
 function normal(value) {
@@ -96,7 +97,7 @@ function safeShopProductUrl(candidate, shop) {
   try {
     const u = new URL(String(candidate || ''), shop.origin);
     if (u.origin !== shop.origin || u.username || u.password || u.port) return null;
-    if (!/^\/(?:[a-z]{2}\/)?products\/[a-z0-9][a-z0-9-]{1,150}\/?$/i.test(u.pathname)) return null;
+    if (!/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?products\/[a-z0-9][a-z0-9-]{1,150}\/?$/i.test(u.pathname)) return null;
     // No tracking parameters or untrusted query strings are necessary.
     return u.origin + u.pathname;
   } catch { return null; }
