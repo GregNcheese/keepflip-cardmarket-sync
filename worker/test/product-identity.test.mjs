@@ -177,3 +177,49 @@ test('ambiguous registry yields candidate identities, not invented exact autofil
   assert.match(result.warning,/Meerdere uitvoeringen/);
   assert.equal(result.requiresConfirmation,true);
 });
+
+test('product-type autofill handles five language markets without assuming content counts',()=>{
+  const examples = [
+    ['Pokémon 151 Japanese Booster Box','box'],
+    ['Japanese Expansion Pack Box','box'],
+    ['ポケモンカード 強化拡張パック クリムゾンヘイズ BOX','box'],
+    ['ポケモンカード 拡張パック クリムゾンヘイズ','pack'],
+    ['포켓몬 카드 확장팩 1박스','box'],
+    ['한국 포켓몬 부스터팩 1박스','box'],
+    ['한국 포켓몬 확장팩','pack'],
+    ['繁體中文 補充包 1盒','box'],
+    ['简体中文 补充包 1盒','box'],
+    ['繁體中文 補充包','pack'],
+    ['Scarlet Violet Booster Box Case',null],
+    ['Scarlet Violet 3-Pack Blister',null],
+    ['Paldean Fates Booster Bundle','bundle'],
+    ['Paldean Fates Pokemon Center Elite Trainer Box','etb'],
+    ['Scarlet Violet Ultra-Premium Collection','upc']
+  ];
+  for (const [name,type] of examples) {
+    assert.equal(inferProductType(name),type,name);
+  }
+});
+
+test('a requested Cardmarket ID distinguishes otherwise identical registered products',()=>{
+  const a=record({cardmarketProductId:'1234',sourceUrl:source});
+  const b=record({cardmarketProductId:'2345',sourceUrl:otherSource,packCount:8});
+  const result=selectVerifiedProduct([a,b],
+    {name:named,type:'bundle',id:'2345'},normalize,allowed,lang);
+  assert.equal(result.status,'exact');
+  assert.equal(result.record.packCount,8);
+});
+
+test('Japanese box and Korean pack counts do not become a card-per-pack guess',async()=>{
+  const japanese='Japanese Expansion Pack Box';
+  const u='https://www.pokemon.com/us/pokemon-tcg/product-gallery/japanese-expansion-pack-box';
+  const html='<html><main><h1>'+japanese+'</h1><p>1BOX=30パック. 1パック=5枚.</p></main></html>';
+  const result=await fakeLookup({productName:japanese,productType:'other',sourceUrl:u},{
+    official:{[u]:html}
+  });
+  assert.equal(result.productType,'box');
+  assert.equal(result.suggestedCount,30);
+  assert.equal(result.suggestedCardsPerPack,5);
+  assert.equal(result.suggestedLanguage,null);
+  assert.equal(result.requiresConfirmation,true);
+});
