@@ -6,6 +6,7 @@ on:
     paths:
       - "worker/src/cardos.js"
       - "worker/src/cardos-lab.js"
+      - "worker/src/cardos-vision.js"
       - "worker/src/index.js"
       - "worker/src/testlab.js"
       - "worker/src/live-product-search.js"
