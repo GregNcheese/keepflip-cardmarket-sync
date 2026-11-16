@@ -1,0 +1,59 @@
+{
+  "schema": "keepflip-photo-rescue-v1",
+  "generatedAt": "2026-11-16T08:58:53+00:00",
+  "notes": "Only source URL metadata. Do not rehost images; card photo is not proof of print version.",
+  "summary": {
+    "checked": 3,
+    "officialImagesVerified": 0
+  },
+  "cards": [
+    {
+      "cardId": "sm10-042",
+      "language": "ja",
+      "name": "Marshadow & Machamp GX",
+      "setCode": "SM10",
+      "setName": "Double Blaze",
+      "localNumber": "042",
+      "cardmarketCandidateId": 557397,
+      "source": "pokemon-card.com official JP card database",
+      "sourcePage": "https://www.pokemon-card.com/card-search/details.php/card/36361/regu/XY",
+      "photoUrl": null,
+      "photoStatus": "source-mismatch",
+      "printVerified": false,
+      "priceVerified": false,
+      "details": "Official page did not confirm the expected set and collector number"
+    },
+    {
+      "cardId": "sm11-054",
+      "language": "ja",
+      "name": "Mega Sableye & Tyranitar GX",
+      "setCode": "SM11",
+      "setName": "Miracle Twin",
+      "localNumber": "054",
+      "cardmarketCandidateId": 557016,
+      "source": "pokemon-card.com official JP card database",
+      "sourcePage": "https://www.pokemon-card.com/card-search/details.php/card/36801/regu/all",
+      "photoUrl": null,
+      "photoStatus": "source-mismatch",
+      "printVerified": false,
+      "priceVerified": false,
+      "details": "Official page did not confirm the expected set and collector number"
+    },
+    {
+      "cardId": "cp6-015",
+      "language": "ja",
+      "name": "Ninetales",
+      "setCode": "CP6",
+      "setName": "Expansion Pack 20th Anniversary",
+      "localNumber": "015",
+      "cardmarketCandidateId": 562471,
+      "source": "pokemon-card.com official JP card database",
+      "sourcePage": "https://www.pokemon-card.com/card-search/details.php/card/32221/regu/XY",
+      "photoUrl": null,
+      "photoStatus": "source-mismatch",
+      "printVerified": false,
+      "priceVerified": false,
+      "details": "Official page did not confirm the expected set and collector number"
+    }
+  ]
+}
