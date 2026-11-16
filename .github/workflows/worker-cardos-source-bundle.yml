@@ -1,0 +1,42 @@
+name: Keep & Flip TEST — complete copyable Worker source bundle
+on:
+  push:
+    branches:
+      - test/cloudflare-worker-gemini-autofill-218
+    paths:
+      - "worker/src/cardos.js"
+      - "worker/src/cardos-lab.js"
+      - ".github/workflows/worker-cardos-source-bundle.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install existing Worker dependencies
+        run: npm --prefix worker install --no-audit --no-fund
+      - name: Build complete one-file Worker without deploying or exposing secrets
+        run: |
+          npm --prefix worker run check:cloudflare
+          mkdir -p cardos-export
+          FILE=$(find worker/.wrangler/dryrun -type f -name '*.js' | head -1)
+          test -n "$FILE"
+          cp "$FILE" cardos-export/KeepFlip_CardOS_Worker_COMPLETE.js
+          cp worker/src/*.js cardos-export/
+          cp worker/wrangler.jsonc cardos-export/wrangler.jsonc
+          cp worker/README_2.1.8_GEMINI_SEARCH_TEST.md cardos-export/README.md
+          node --check cardos-export/KeepFlip_CardOS_Worker_COMPLETE.js
+          echo "Standalone full source size:"
+          wc -c cardos-export/KeepFlip_CardOS_Worker_COMPLETE.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KeepFlip-CardOS-Worker-Full-Source
+          path: cardos-export/
+          retention-days: 14
+          if-no-files-found: error
