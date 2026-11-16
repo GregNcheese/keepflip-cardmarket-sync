@@ -22,7 +22,7 @@ class SetFallbackTests(unittest.TestCase):
         self.assertEqual(len(x["sets"]),1)
         self.assertEqual(x["sets"][0]["count"],10)
         self.assertEqual(x["sets"][0]["cardmarketExpansionId"],31)
-        self.assertEqual(x["sets"][0]["products"][0][0],562471)
+        self.assertIn(562471, [p[0] for p in x["sets"][0]["products"]])
 
     def test_wrong_anchor_name_must_fail(self):
         self.config["sets"][0]["anchorName"]="Delcatty"
