@@ -1,0 +1,57 @@
+name: Keep & Flip - Official Photo Fallback 2.21.13 TEST
+on:
+  push:
+    branches:
+      - test/photo-recovery-22113
+    paths:
+      - scripts/verify_official_photo_sources.py
+      - config/official_japanese_photo_sources.json
+      - tests/test_official_photo_sources.py
+      - .github/workflows/official-photo-22113.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: keepflip-photo-22113
+  cancel-in-progress: false
+jobs:
+  photo-fallback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run offline source-validation tests
+        run: python -m unittest discover -s tests -p test_official_photo_sources.py -v
+      - name: Verify official Japanese card pages and image URLs
+        run: python scripts/verify_official_photo_sources.py
+      - name: Inspect public photo metadata (not image bytes)
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          o=json.loads(Path('test-data/photo-22113/official-photo-fallbacks.json').read_text())
+          assert o['schema']=='keepflip-photo-rescue-v1'
+          assert len(o['cards'])==3
+          assert all(r['printVerified']==False and r['priceVerified']==False for r in o['cards'])
+          print('Photo status:',[(r['cardId'],r['photoStatus']) for r in o['cards']])
+          PY
+      - name: Commit metadata report to isolated test branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add test-data/photo-22113/
+          if ! git diff --cached --quiet; then
+            git commit -m 'test data: official Japanese photo URL verification [skip ci]'
+            git push origin HEAD:test/photo-recovery-22113
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keepflip-photo-22113-metadata
+          path: test-data/photo-22113/
+          if-no-files-found: error
+# No Github Pages deployment. No private inventory. No copyrighted image bytes copied.

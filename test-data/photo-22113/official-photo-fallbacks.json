@@ -1,0 +1,59 @@
+{
+  "schema": "keepflip-photo-rescue-v1",
+  "generatedAt": "2026-11-16T09:00:43+00:00",
+  "notes": "Only source URL metadata. Do not rehost images; card photo is not proof of print version.",
+  "summary": {
+    "checked": 3,
+    "officialImagesVerified": 3
+  },
+  "cards": [
+    {
+      "cardId": "sm10-042",
+      "language": "ja",
+      "name": "Marshadow & Machamp GX",
+      "setCode": "SM10",
+      "setName": "Double Blaze",
+      "localNumber": "042",
+      "cardmarketCandidateId": 557397,
+      "source": "pokemon-card.com official JP card database",
+      "sourcePage": "https://www.pokemon-card.com/card-search/details.php/card/36361/regu/XY",
+      "photoUrl": "https://www.pokemon-card.com/assets/images/card_images/large/SM10/036361_P_MASHADOKAIRIKIGX.jpg",
+      "photoStatus": "verified-official-card-image",
+      "printVerified": false,
+      "priceVerified": false,
+      "details": "Official Japanese page set + collector number and JPEG are verified; variant still review-only"
+    },
+    {
+      "cardId": "sm11-054",
+      "language": "ja",
+      "name": "Mega Sableye & Tyranitar GX",
+      "setCode": "SM11",
+      "setName": "Miracle Twin",
+      "localNumber": "054",
+      "cardmarketCandidateId": 557016,
+      "source": "pokemon-card.com official JP card database",
+      "sourcePage": "https://www.pokemon-card.com/card-search/details.php/card/36801/regu/all",
+      "photoUrl": "https://www.pokemon-card.com/assets/images/card_images/large/SM11/036801_P_MEGAYAMIRAMIBANGIRASUGX.jpg",
+      "photoStatus": "verified-official-card-image",
+      "printVerified": false,
+      "priceVerified": false,
+      "details": "Official Japanese page set + collector number and JPEG are verified; variant still review-only"
+    },
+    {
+      "cardId": "cp6-015",
+      "language": "ja",
+      "name": "Ninetales",
+      "setCode": "CP6",
+      "setName": "Expansion Pack 20th Anniversary",
+      "localNumber": "015",
+      "cardmarketCandidateId": 562471,
+      "source": "pokemon-card.com official JP card database",
+      "sourcePage": "https://www.pokemon-card.com/card-search/details.php/card/32221/regu/XY",
+      "photoUrl": "https://www.pokemon-card.com/assets/images/card_images/large/CP6/032221_P_KYUUKON.jpg",
+      "photoStatus": "verified-official-card-image",
+      "printVerified": false,
+      "priceVerified": false,
+      "details": "Official Japanese page set + collector number and JPEG are verified; variant still review-only"
+    }
+  ]
+}
