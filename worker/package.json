@@ -1,0 +1,10 @@
+{
+  "name": "keepflip-cloudflare-worker",
+  "version": "2.1.4-github-test",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check src/index.js",
+    "test": "node --test test/*.test.mjs"
+  }
+}
