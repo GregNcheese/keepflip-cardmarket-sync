@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.js';
-import { inferProductType, additionalCount, mergeCountEvidence } from '../src/autofill.js';
+import { inferProductType, additionalCount, mergeCountEvidence, explicitCardLanguage } from '../src/autofill.js';
 
 const base = 'https://late-smoke-2a21.chokorii.workers.dev';
 const registry = 'https://raw.githubusercontent.com/GregNcheese/test/main/registry.json';
@@ -137,4 +137,15 @@ test('single booster never acquires a meaningless boosters-per-package count', a
   assert.equal(result.verifiedFields.boosters, false);
   assert.equal(result.missingFields.includes('boosters'), false);
   assert.equal(result.suggestedCardsPerPack, 10);
+});
+
+test('autofill language requires an explicit statement and disallows contradictions', () => {
+  assert.equal(explicitCardLanguage('Card language: Japanese'), 'JP');
+  assert.equal(explicitCardLanguage('Kaarttaal: Koreaans'), 'KR');
+  assert.equal(explicitCardLanguage('言語：日本語'), 'JP');
+  assert.equal(explicitCardLanguage('언어: 한국어'), 'KR');
+  assert.equal(explicitCardLanguage('语言：简体中文'), 'ZH-CN');
+  assert.equal(explicitCardLanguage('Product language: traditional chinese'), 'ZH-TW');
+  assert.equal(explicitCardLanguage('Japanese Pokémon card sold by an English shop'), null);
+  assert.equal(explicitCardLanguage('Card language: English. Card language: Japanese.'), null);
 });
