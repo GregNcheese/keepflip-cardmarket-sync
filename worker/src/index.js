@@ -533,7 +533,7 @@ async function fetchLiveProductJson(sourceUrl, name, type, language) {
       cf:{ cacheTtl:1800 }
     });
     if (!response.ok || Number(response.headers.get('content-length') || 0)>260000 ||
-        !String(response.headers.get('content-type') || '').includes('json'))
+        !/^(?:application\/json|application\/javascript|text\/javascript)(?:\s*;|$)/i.test(String(response.headers.get('content-type') || '')))
       return { status:'http-' + response.status };
     const raw=await response.text();
     if (raw.length > 260000) return { status:'oversize' };
