@@ -317,7 +317,7 @@ function countFromText(text, type) {
   const patterns = type === 'packs'
     ? [
       new RegExp(
-        `\\b(${NUMBER})\\s*(?:x|×)?\\s*(?:[\\w&:—–-]+\\s+){0,10}booster\\s*packs?\\b`,
+        `\\b(${NUMBER})\\s*(?:x|×)?\\s*(?:(?:pok[eé]mon\\s+)?(?:tcg\\s+)?)?booster\\s*packs?\\b`,
         'gi'
       ),
       new RegExp(
@@ -369,9 +369,16 @@ function countFromText(text, type) {
       if (n !== null) numbers.push(n);
     }
   }
-  const unique = [...new Set(numbers)];
+  // A sealed retail box normally contains <=60 boosters; a booster card
+  // count <=30. This protects against set identifiers ("151 booster"),
+  // protective-sleeve quantities ("70 sleeves"), and unrelated accessories.
+  // Larger unusual products stay unverified until explicit specialist logic.
+  const maximum = type === 'packs' ? 60 : 30;
+  const unique = [...new Set(numbers.filter(value => value <= maximum))];
   if (unique.length > 1) return null;
-  return mergeCountEvidence(unique.length === 1 ? unique[0] : null, additionalCount(text, type === 'packs' ? 'packs' : 'cards'));
+  const extra = additionalCount(text, type === 'packs' ? 'packs' : 'cards');
+  return mergeCountEvidence(unique.length === 1 ? unique[0] : null,
+    extra !== null && extra <= maximum ? extra : null);
 }
 function productLanguageFromText(text) {
   return explicitCardLanguage(text);
