@@ -1,6 +1,7 @@
 import { discoverLiveProductPages, matchesLiveProductTitle } from './live-product-search.js';
 import { discoverCardos, cardosUsage, cardosSearch, cardosGetProduct } from './cardos.js';
 import { renderCardosLab } from './cardos-lab.js';
+import { identifyCardosVision } from './cardos-vision.js';
 import { renderTestLab } from './testlab.js';
 import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfidence, explicitCardLanguage } from './autofill.js';
 import { matchingOfficialTitle, selectVerifiedProduct, scopedProductHtml, editionCompatible } from './product-identity.js';
@@ -2091,6 +2092,7 @@ export default {
         geminiConfigured:
           !!env.GEMINI_API_KEY,
         cardosConfigured: !!env.CARDOS_API_KEY,
+        cardosVisionAvailable: !!env.CARDOS_API_KEY,
         accessConfigured:
           !!env.KEEPFLIP_ACCESS_TOKEN,
         registryConfigured:
@@ -2103,7 +2105,7 @@ export default {
     }
     if (
       request.method === 'OPTIONS' &&
-      (path === '/lookup' || path === '/image-lookup' || path === '/image' || path === '/cardos/test')
+      (path === '/lookup' || path === '/image-lookup' || path === '/image' || path === '/cardos/test' || path === '/cardos/vision')
     ) {
       if (!origin) {
         return reply({
@@ -2124,7 +2126,7 @@ export default {
       });
     }
     if (
-      !(request.method === 'POST' && (path === '/lookup' || path === '/image-lookup' || path === '/cardos/test')) &&
+      !(request.method === 'POST' && (path === '/lookup' || path === '/image-lookup' || path === '/cardos/test' || path === '/cardos/vision')) &&
       !(request.method === 'GET' && path === '/image')
     ) {
       return reply({
@@ -2162,17 +2164,18 @@ export default {
       if (path === '/image') {
         return await serveVerifiedImage(new URL(request.url).searchParams.get('url'), request, origin);
       }
+      const payloadLimit = path === '/cardos/vision' ? 14_100_000 : MAX_BODY;
       if (
         Number(
           request.headers.get('Content-Length') || 0
-        ) > MAX_BODY
+        ) > payloadLimit
       ) {
         return reply({
           error: 'Te groot'
         }, 413, origin);
       }
       const raw = await request.text();
-      if (raw.length > MAX_BODY) {
+      if (raw.length > payloadLimit) {
         return reply({
           error: 'Te groot'
         }, 413, origin);
@@ -2184,6 +2187,13 @@ export default {
         return reply({
           error: 'Ongeldige JSON'
         }, 400, origin);
+      }
+      if(path === '/cardos/vision') {
+        // Existing Bearer-token and origin checks have already passed.
+        // Paid identification is permitted only as the explicitly marked
+        // zero-result fallback for a user-initiated photo scan.
+        const result = await identifyCardosVision(env,data);
+        return reply(result,200,origin);
       }
       if(path === '/cardos/test') {
         const action = String(data?.action || '');
