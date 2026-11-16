@@ -1,0 +1,9 @@
+{
+  "targets": [
+    {"label":"Altaria","url":"https://www.cardmarket.com/en/Pokemon/Products/Singles/Hidden-Fates/Altaria-HIFSV37","language":"en","tcgdexSetId":"sma","localNumber":"SV37","variant":""},
+    {"label":"Mega Sableye & Tyranitar GX","url":"https://www.cardmarket.com/en/Pokemon/Products/Singles/Miracle-Twin/Mega-Sableye-Tyranitar-GX-V1-sm11054","language":"ja","tcgdexSetId":"sm11","localNumber":"054","variant":"V1"},
+    {"label":"Marshadow & Machamp GX","url":"https://www.cardmarket.com/en/Pokemon/Products/Singles/Double-Blaze/Marshadow-Machamp-GX-V1-sm10042","language":"ja","tcgdexSetId":"sm10","localNumber":"042","variant":"V1"},
+    {"label":"Jolteon ex","url":"https://www.cardmarket.com/en/Pokemon/Products/Singles/Terastal-Festival-ex/Jolteon-ex-V1-sv8a052","language":"ja","tcgdexSetId":"sv8a","localNumber":"052","variant":"V1"},
+    {"label":"Team Magma's Houndoom","url":"https://www.cardmarket.com/en/Pokemon/Products/Singles/EX-Team-Magma-vs-Team-Aqua/Team-Magmas-Houndoom-MA34?minCondition=4&isFirstEd=Y","language":"en","tcgdexSetId":"ex4","localNumber":"34","variant":""}
+  ]
+}
