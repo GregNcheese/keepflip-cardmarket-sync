@@ -12,7 +12,8 @@
   "previews": {
     "vars": {
       "APP_ORIGIN": "https://gregncheese.github.io",
-      "ENABLE_GOOGLE_SEARCH": "true",
+      "ENABLE_GOOGLE_SEARCH": "false",
+      "DIRECT_WEB_DISCOVERY": "true",
       "KEEPFLIP_REGISTRY_URL": "https://raw.githubusercontent.com/GregNcheese/keepflip-cardmarket-sync/refs/heads/test/cloudflare-worker-autofill-216-fresh-preview/worker/data/verified-products-starter.json"
     }
   }
