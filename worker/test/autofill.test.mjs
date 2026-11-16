@@ -92,8 +92,8 @@ test('autofills exactly matched verified registry fields and inferred type', asy
   assert.equal(result.suggestedLanguage, 'EN');
   assert.equal(result.verifiedFields.boosters, true);
   assert.equal(result.verifiedFields.cardsPerPack, true);
-  assert.equal(result.verifiedFields.productType, false);
-  assert.equal(result.provisionalFields.productType, true);
+  assert.equal(result.verifiedFields.productType, true);
+  assert.equal(result.provisionalFields.productType, false);
   assert.equal(result.status, 'match');
 });
 
