@@ -19,6 +19,7 @@ class FakeD1 {
         return db.record?{...db.record}:null;
       },
       async run(){
+        if(sql.startsWith('CREATE TABLE IF NOT EXISTS'))return {meta:{changes:0}};
         const a=this.params||[];
         if(sql.startsWith('INSERT OR IGNORE INTO keepflip_sync_state')){
           if(db.record)return {meta:{changes:0}};
