@@ -1,5 +1,11 @@
 name: Keep & Flip - Cardmarket daily data sync
 on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/build_public_image_index.py"
+      - "tests/test_public_image_rescue.py"
+      - ".github/workflows/cardmarket-sync.yml"
   schedule:
     # 04:35 UTC, after the usual nightly Cardmarket price guide update
     - cron: '35 4 * * *'
@@ -43,6 +49,47 @@ jobs:
           else
             python scripts/build_data.py
           fi
+      - name: Verify photo-index safety (free; no private data)
+        run: python -m unittest discover -s tests -p 'test_public_image_rescue.py' -v
+      - name: Build / reuse public shop image URLs (free; no keys)
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          import json, shutil, pathlib, datetime as dt
+          from urllib.request import Request,urlopen
+          from scripts.build_public_image_index import build,SCHEMA
+          target=pathlib.Path('site/data/image-rescue.json')
+          target.parent.mkdir(parents=True,exist_ok=True)
+          previous=pathlib.Path('.cache/cardmarket/image-rescue.json')
+          previous.parent.mkdir(parents=True,exist_ok=True)
+          url='https://gregncheese.github.io/keepflip-cardmarket-sync/data/image-rescue.json'
+          try:
+              with urlopen(Request(url,headers={'User-Agent':'KeepFlip-ImageIndex/1.0'}),timeout=16) as res:
+                  raw=res.read(7_000_001)
+              if len(raw)>7_000_000:raise ValueError('Index too big')
+              doc=json.loads(raw)
+              if doc.get('schema')==SCHEMA and len(doc.get('images',[]))>0:
+                  previous.write_bytes(raw)
+          except Exception as e:
+              print('Previous public image index unavailable:',type(e).__name__)
+          reuse=False
+          if previous.exists():
+              try:
+                  data=json.loads(previous.read_text())
+                  stamp=dt.datetime.fromisoformat(data['generatedAt'])
+                  if stamp.tzinfo is None:stamp=stamp.replace(tzinfo=dt.timezone.utc)
+                  age=dt.datetime.now(dt.timezone.utc)-stamp
+                  reuse=(dt.timedelta(0)<=age<dt.timedelta(days=6)
+                          and not data.get('upstreamFailures')
+                          and data.get('schema')==SCHEMA)
+              except (ValueError,KeyError,TypeError):pass
+          if reuse:
+              shutil.copyfile(previous,target)
+              print('PHOTO_INDEX_REUSED: recent public URLs; no retailer crawling')
+          else:
+              build(target,existing=previous if previous.exists() else None)
+          print('PHOTO_INDEX_COUNT:',len(json.loads(target.read_text())['images']))
+          PY
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload static data files
