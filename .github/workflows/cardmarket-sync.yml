@@ -90,6 +90,54 @@ jobs:
               build(target,existing=previous if previous.exists() else None)
           print('PHOTO_INDEX_COUNT:',len(json.loads(target.read_text())['images']))
           PY
+      - name: Verify Japanese card-photo matching safety (no keys)
+        run: python -m unittest discover -s tests -p 'test_japanese_photo_archive.py' -v
+      - name: Weekly public Japanese card-photo URLs for name + set fallback
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          import datetime as dt, json, pathlib, shutil
+          from urllib.request import Request,urlopen
+          from scripts.build_japanese_photo_archive import build,SCHEMA
+          dest=pathlib.Path('site/data/japanese-card-images.json')
+          dest.parent.mkdir(parents=True,exist_ok=True)
+          previous=pathlib.Path('.cache/cardmarket/japanese-card-images.json')
+          previous.parent.mkdir(parents=True,exist_ok=True)
+          public='https://gregncheese.github.io/keepflip-cardmarket-sync/data/japanese-card-images.json'
+          try:
+              with urlopen(Request(public,headers={'User-Agent':'KeepFlip-ImageMetadataSync/1.0'}),timeout=16) as r:
+                  raw=r.read(13_000_001)
+              if len(raw)>13_000_000:raise ValueError('Too large')
+              doc=json.loads(raw)
+              if doc.get('schema')==SCHEMA and len(doc.get('cards',[]))>=100:
+                  previous.write_bytes(raw)
+          except (OSError,ValueError,TypeError) as e:
+              print('Existing public Japanese image index not yet available:',type(e).__name__)
+          recent=False
+          if previous.exists():
+              try:
+                  old=json.loads(previous.read_text())
+                  age=dt.datetime.now(dt.timezone.utc)-dt.datetime.fromisoformat(old['generatedAt'])
+                  recent=(dt.timedelta(0)<=age<dt.timedelta(days=6)
+                         and old.get('schema')==SCHEMA and len(old.get('cards',[]))>=100)
+              except (ValueError,TypeError,KeyError):pass
+          if recent:
+              shutil.copyfile(previous,dest)
+              print('JAPANESE_INDEX_REUSED: weekly URL metadata; no crawling')
+          else:
+              try:
+                  doc=build(dest,previous if previous.exists() else None)
+                  if previous.exists():
+                      old=json.loads(previous.read_text())
+                      if len(old.get('cards',[]))>1000 and len(doc['cards'])<len(old['cards'])*0.7:
+                          raise ValueError('New image index unexpectedly shrank')
+              except Exception as e:
+                  print('JAPANESE_INDEX_REFRESH_FAILED:',type(e).__name__)
+                  if previous.exists():shutil.copyfile(previous,dest)
+                  elif dest.exists():dest.unlink()
+          if dest.exists():
+              print('JAPANESE_INDEX_PUBLISHED_COUNT:',len(json.loads(dest.read_text())['cards']))
+          PY
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload static data files
