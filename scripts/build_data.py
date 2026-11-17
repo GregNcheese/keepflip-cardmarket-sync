@@ -112,7 +112,8 @@ def build(outdir: Path, cache_dir: Path, source_dir: Path | None, refresh_catalo
                         raise ValueError(f'prices: source shrank from {len(previous)} to {len(rows)} rows')
                 except json.JSONDecodeError:
                     pass
-            if not source_dir: write_json(cache_file, raw_data)
+            # Price cache is updated only AFTER the entire build passes
+            # freshness and publication validation below.
         obj = slim(kind, rows, raw_data['createdAt'])
         filename = kind+'.json'
         write_json(outdir/filename, obj)
@@ -133,6 +134,8 @@ def build(outdir: Path, cache_dir: Path, source_dir: Path | None, refresh_catalo
         age = dt.datetime.now(dt.timezone.utc)-price_date.astimezone(dt.timezone.utc)
         if age > dt.timedelta(days=5) or age < dt.timedelta(days=-1):
             raise ValueError(f'prices: official source date outside safe freshness window ({age})')
+    if not source_dir:
+        write_json(cache_dir/'prices.json', raw_data)
     manifest['checks']={'pricesValidated':True,'sourceDatesValidated':True}
     write_json(outdir/'manifest.json', manifest)
     return manifest
