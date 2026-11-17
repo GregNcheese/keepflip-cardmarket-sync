@@ -1,0 +1,309 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import worker from '../src/index.js';
+import { matchesLiveProductTitle, searchQueries, discoverLiveProductPages } from '../src/live-product-search.js';
+
+const base = 'https://preview.example.workers.dev';
+const jpName = 'Pokemon Card 151 Japanese Booster Box';
+const jpUrl = 'https://rarecards.nl/en/products/pokemon-jp-151-booster-box';
+const cnName = 'Pokemon TCG Simplified Chinese Gem Pack Vol 1 Booster Box';
+
+test('strict live matching supports JP and CN without mixing EN or Pokemon Center', () => {
+  assert.equal(matchesLiveProductTitle(jpName, 'Pokémon (JP) 151: Booster Box', 'box', 'JP'), true);
+  assert.equal(matchesLiveProductTitle(jpName, 'Pokémon (EN) 151: Booster Box', 'box', 'JP'), false);
+  assert.equal(matchesLiveProductTitle('Paldean Fates Elite Trainer Box',
+    'Paldean Fates Pokemon Center Elite Trainer Box','etb','EN'), false);
+  assert.equal(matchesLiveProductTitle('Pokemon Center Paldean Fates Elite Trainer Box',
+    'Paldean Fates Pokemon Center Elite Trainer Box','etb','EN'), true);
+  assert.equal(matchesLiveProductTitle(cnName,
+    'Pokémon (CN) Gem Pack Vol.1: Booster Box','box','ZH-CN'), true);
+  assert.equal(matchesLiveProductTitle(cnName,
+    'Pokémon (JP) Gem Pack Vol.1: Booster Box','box','ZH-CN'), false);
+  assert.equal(matchesLiveProductTitle('151 Japanese Booster Box', '151 JP Booster Box (no shrink)', 'box','JP'),false);
+  assert.equal(matchesLiveProductTitle('151 Japanese Booster Box', '151 JP Booster Box Case', 'box','JP'),false);
+  assert.equal(matchesLiveProductTitle('Pokemon Glory of Team Rocket Booster Box',
+    '[Traditional Chinese] Pokémon Glory of Team Rocket sv10 Booster Box','box','ZH-TW'),true);
+  assert.equal(matchesLiveProductTitle('Pokemon Glory of Team Rocket Booster Box',
+    '[Traditional Chinese] Pokémon Glory of Team Rocket sv10 Booster Box','box','ZH-CN'),false);
+  assert.equal(matchesLiveProductTitle('Paldean Fates Booster Bundle',
+    'Paldean Fates Booster Bundle Display','bundle','EN'), false);
+});
+
+test('queries are created from the name, not from a product database', () => {
+  assert.deepEqual(searchQueries(jpName, 'box'),['151 booster box','151']);
+  assert.deepEqual(searchQueries('Paldean Fates Booster Bundle','bundle'),
+    ['paldean fates booster bundle','paldean fates']);
+  assert.deepEqual(searchQueries(cnName,'box'),['gem 1 booster box','gem 1']);
+});
+
+function fakeShopify(products=[]) {
+  return new Response(JSON.stringify({
+    resources: { results: { products } }
+  }),{status:200,headers:{'Content-Type':'application/json'}});
+}
+
+test('Shopify public search returns exact candidate URL without a new API key', async () => {
+  const orig=globalThis.fetch, called=[];
+  globalThis.fetch=async input => {
+    const url=String(input);called.push(url);
+    if (url.includes('search/suggest.json')) {
+      return fakeShopify(url.startsWith('https://rarecards.nl/') ? [
+        {title:'Pokémon (JP) 151: Booster Box',url:'/en/products/pokemon-jp-151-booster-box'},
+        {title:'Pokémon (EN) 151: Booster Box',url:'/en/products/pokemon-151-booster-box'},
+        {title:'Pokémon (JP) 151: Booster Box',url:'https://evil.example/steal'}
+      ]:[]);
+    }
+    throw Error('Unexpected network request');
+  };
+  try {
+    const r=await discoverLiveProductPages({DIRECT_WEB_DISCOVERY:'true'},jpName,'box','JP');
+    assert.deepEqual(r.retailUrls,[jpUrl]);
+    assert.equal(r.status,'candidates-found');
+    assert.equal(called.length,3);
+    assert.equal(called.every(x=>x.includes('search/suggest.json')),true);
+  } finally {globalThis.fetch=orig;}
+});
+
+test('malformed or blocked shop responses fail safely and never invent contents', async()=>{
+  const orig=globalThis.fetch;
+  globalThis.fetch=async()=>new Response('<html>blocked</html>',{
+    status:200,headers:{'Content-Type':'text/html'}
+  });
+  try {
+    const r=await discoverLiveProductPages({DIRECT_WEB_DISCOVERY:'true'},jpName,'box','JP');
+    assert.equal(r.status,'no-exact-online-match');
+    assert.deepEqual(r.retailUrls,[]);
+  } finally {globalThis.fetch=orig;}
+});
+
+test('Worker fetches live JP sealed product, proves 20 x 7, skips Google Search', async()=>{
+  const orig=globalThis.fetch, requests=[];
+  globalThis.fetch=async input=>{
+    const url=String(input);requests.push(url);
+    if(url.includes('generativelanguage.googleapis.com')) throw Error('Paid grounding must never run');
+    if(url.includes('api.tcgdex.net')) return new Response('[]',{headers:{'Content-Type':'application/json'}});
+    if(url.includes('search/suggest.json'))return fakeShopify(
+      url.startsWith('https://rarecards.nl/') ? [
+        {title:'Pokémon (JP) 151: Booster Box',url:'/en/products/pokemon-jp-151-booster-box'}
+      ]:[]
+    );
+    if(url===jpUrl)return new Response(
+      '<html><main><h1>Pokémon (JP) 151: Booster Box</h1>'+
+      '<p>Number of boosters per box: 20 packs</p>'+
+      '<p>Number of cards per pack: 7 cards</p>'+
+      '<p>Language: Japanese</p></main></html>',
+      {headers:{'Content-Type':'text/html'}}
+    );
+    return new Response('Not Found',{status:404});
+  };
+  try {
+    const response = await worker.fetch(new Request(base+'/lookup',{
+      method:'POST',headers:{
+        Authorization:'Bearer test-token',
+        Origin:base,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({
+        productName:jpName,productType:'box',language:'JP'
+      })
+    }),{
+      KEEPFLIP_ACCESS_TOKEN:'test-token',
+      APP_ORIGIN:'https://gregncheese.github.io',
+      GEMINI_API_KEY:'fake-not-used',
+      DIRECT_WEB_DISCOVERY:'true',
+      ENABLE_GOOGLE_SEARCH:'false'
+    });
+    assert.equal(response.status,200);
+    const out=await response.json();
+    assert.equal(out.suggestedCount,20);
+    assert.equal(out.suggestedCardsPerPack,7);
+    assert.equal(out.suggestedLanguage,'JP');
+    assert.equal(out.verifiedFields.boosters,true);
+    assert.equal(out.verifiedFields.cardsPerPack,true);
+    assert.equal(out.verifiedFields.productType,true);
+    assert.equal(out.diagnostics.liveDiscovery.matchedProducts,1);
+    assert.equal(out.diagnostics.googleDiscovery.status,'disabled-direct-search');
+    assert.equal(requests.some(x=>x.includes('generativelanguage.googleapis.com')),false);
+    assert.equal(out.sources.some(s=>s.url===jpUrl),true);
+  } finally{globalThis.fetch=orig;}
+});
+
+
+test('Shopify text/javascript product endpoint verifies fields missing from HTML wrapper',async()=>{
+  const saved=globalThis.fetch;
+  globalThis.fetch=async input=>{
+    const url=String(input);
+    if (url.includes('api.tcgdex.net/'))return new Response('[]',{
+      headers:{'Content-Type':'application/json'}
+    });
+    if (url.includes('search/suggest.json'))return fakeShopify(
+      url.startsWith('https://rarecards.nl/') ?
+        [{ title:'Pokémon (JP) 151: Booster Box',url:'/en/products/pokemon-jp-151-booster-box' }]:[]);
+    if (url.endsWith('/pokemon-jp-151-booster-box.js'))return new Response(JSON.stringify({
+      title:'Pokémon (JP) 151: Booster Box',
+      description:'<p>Aantal booster packs per box: 20 packs</p><p>Aantal kaarten per pack: 7 kaarten</p><p>Taal: Japans</p>'
+    }),{headers:{'Content-Type':'text/javascript; charset=utf-8'}});
+    if (url.endsWith('/pokemon-jp-151-booster-box')) return new Response(
+      '<html><h1>Pokémon (JP) 151: Booster Box</h1><script type="application/json">irrelevant data</script></html>',
+      {headers:{'Content-Type':'text/html'}});
+    return new Response('No',{status:404});
+  };
+  try {
+    const response=await worker.fetch(new Request(base+'/lookup',{
+      method:'POST',
+      headers:{Authorization:'Bearer test-token',Origin:base,'Content-Type':'application/json'},
+      body:JSON.stringify({ productName:jpName,productType:'box',language:'JP'})
+    }),{
+      KEEPFLIP_ACCESS_TOKEN:'test-token',APP_ORIGIN:'https://gregncheese.github.io',
+      DIRECT_WEB_DISCOVERY:'true',ENABLE_GOOGLE_SEARCH:'false'
+    });
+    const out=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(out.suggestedCount,20);
+    assert.equal(out.suggestedCardsPerPack,7);
+    assert.equal(out.suggestedLanguage,'JP');
+    assert.equal(out.diagnostics.productJsonFetch[0].status,'verified-title');
+  } finally{ globalThis.fetch=saved; }
+});
+
+
+test('direct live mode does not silently use the old manually curated product records',async()=>{
+  const original=globalThis.fetch;
+  globalThis.fetch=async input=>{
+    const url=String(input);
+    if(url.includes('api.tcgdex.net')) return new Response('[]',{
+      headers:{'Content-Type':'application/json'}
+    });
+    if(url.includes('search/suggest.json'))return fakeShopify([]);
+    return new Response('Not found',{status:404});
+  };
+  try {
+    const response=await worker.fetch(new Request(base+'/lookup',{
+      method:'POST',
+      headers:{Authorization:'Bearer test-token',Origin:base,
+        'Content-Type':'application/json'},
+      body:JSON.stringify({productName:'Delta Reign Booster Bundle',productType:'bundle'})
+    }),{
+      KEEPFLIP_ACCESS_TOKEN:'test-token',
+      APP_ORIGIN:'https://gregncheese.github.io',
+      KEEPFLIP_REGISTRY_URL:'https://raw.githubusercontent.com/x/y/old-hardcoded-registry.json',
+      DIRECT_WEB_DISCOVERY:'true',
+      ENABLE_GOOGLE_SEARCH:'false'
+    });
+    const out=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(out.verifiedFields.boosters,false);
+    assert.equal(out.verifiedFields.cardsPerPack,false);
+    assert.equal(out.sourceVerified,false);
+    assert.equal(out.sources.some(s=>s.kind==='product-reference'),false);
+    assert.equal(out.diagnostics.liveDiscovery.status,'no-exact-online-match');
+  }finally{globalThis.fetch=original;}
+});
+
+
+test('Taiwan traditional Chinese contents verify from matching Shopify JSON even if HTML heading differs',async()=>{
+  const original=globalThis.fetch;
+  const title='[Traditional Chinese] Pokémon Glory of Team Rocket sv10 Booster Box';
+  const handle='traditional-chinese-pokemon-glory-of-team-rocket-sv10-booster-box';
+  globalThis.fetch=async input=>{
+    const url=String(input);
+    if(url.includes('api.tcgdex.net/'))return new Response('[]',{
+      headers:{'Content-Type':'application/json'}
+    });
+    if(url.includes('/search/suggest.json'))return fakeShopify(
+      url.startsWith('https://www.tcghobby.com/') ?
+        [{title,url:'/en-gb/products/'+handle+'?tracking=omitted'}]:[]
+    );
+    if(url==='https://www.tcghobby.com/en-gb/products/'+handle)
+      return new Response('<html><h1>Shop product listing</h1></html>',{
+        headers:{'Content-Type':'text/html'}
+      });
+    if(url==='https://www.tcghobby.com/products/'+handle+'.js')
+      return new Response(JSON.stringify({
+        title, description:'<p>Language Traditional Chinese</p><p>Content 1 box = 30 packs 1 pack = 6 cards</p>'
+      }),{headers:{'Content-Type':'text/javascript; charset=utf-8'}});
+    return new Response('not found',{status:404});
+  };
+  try{
+    const response=await worker.fetch(new Request(base+'/lookup',{
+      method:'POST',
+      headers:{Authorization:'Bearer test-token',Origin:base,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        productName:'Pokemon Glory of Team Rocket sv10 Traditional Chinese Booster Box',
+        productType:'box', language:'ZH-TW'
+      })
+    }),{
+      KEEPFLIP_ACCESS_TOKEN:'test-token',
+      APP_ORIGIN:'https://gregncheese.github.io',
+      DIRECT_WEB_DISCOVERY:'true',ENABLE_GOOGLE_SEARCH:'false'
+    });
+    const out=await response.json();
+    assert.equal(response.status,200);
+    assert.equal(out.suggestedCount,30);
+    assert.equal(out.suggestedCardsPerPack,6);
+    assert.equal(out.suggestedLanguage,'ZH-TW');
+    assert.equal(out.verifiedFields.boosters,true);
+    assert.equal(out.verifiedFields.cardsPerPack,true);
+    assert.equal(out.verifiedFields.language,true);
+    assert.equal(out.verifiedFields.productType,true);
+    assert.equal(out.diagnostics.secondaryFetch[0].titleEvidence,'independent-shopify-json-title');
+    assert.equal(out.sources.some(s=>s.url.includes('www.tcghobby.com')),true);
+  }finally{globalThis.fetch=original;}
+});
+
+
+test('Korean 151 search includes printing language and accepts the correct online source', async()=>{
+  const input='Pokemon Card 151 Korean Booster Box';
+  assert.deepEqual(searchQueries(input,'box'), ['151 korean booster box','151 korean']);
+  assert.deepEqual(searchQueries('Pokemon Card 151 Booster Box','box','KR'),
+    ['151 korean booster box','151 korean']);
+  assert.equal(matchesLiveProductTitle(input,'151 Booster Box - Korean Pokémon TCG','box','KR'),true);
+  assert.equal(matchesLiveProductTitle(input,'151 Booster Box - Japanese Pokémon TCG','box','KR'),false);
+  assert.equal(matchesLiveProductTitle('Pokemon Card 151 Japanese Booster Box',
+    'Pokemon Card 151 Japanese Booster Box (1 Sealed Case)','box','JP'),false);
+  const saved=globalThis.fetch,calls=[];
+  globalThis.fetch=async input=>{
+    const url=String(input);calls.push(url);
+    if(url.includes('api.tcgdex.net'))return new Response('[]',{headers:{'Content-Type':'application/json'}});
+    if(url.includes('/search/suggest.json')){
+      assert.ok(!url.startsWith('https://rarecards.nl'));
+      assert.ok(!url.startsWith('https://www.tcghobby.com'));
+      if(url.startsWith('https://card-binder.com/'))return fakeShopify([
+        {title:'151 Booster Box - Japanese Pokémon TCG',url:'/products/japanese-151'},
+        {title:'151 Korean Booster Box',url:'/products/pokemon-151-korean-booster-box'}
+      ]);
+      return fakeShopify([]);
+    }
+    if(url==='https://card-binder.com/products/pokemon-151-korean-booster-box')
+      return new Response('<html><h1>151 Korean Booster Box</h1></html>',{
+        status:200,headers:{'Content-Type':'text/html'}});
+    if(url==='https://card-binder.com/products/pokemon-151-korean-booster-box.js')
+      return new Response(JSON.stringify({
+        title:'151 Korean Booster Box',
+        description:'<p>Contains 20 booster packs</p><p>Each booster pack contains 7 game cards.</p><p>Card language: Korean.</p>'
+      }),{headers:{'Content-Type':'text/javascript; charset=utf-8'}});
+    return new Response('Not found',{status:404});
+  };
+  try {
+    const response=await worker.fetch(new Request(base+'/lookup',{
+      method:'POST',
+      headers:{Authorization:'Bearer test-token',Origin:base,'Content-Type':'application/json'},
+      body:JSON.stringify({productName:input,productType:'box',language:'KR'})
+    }),{
+      KEEPFLIP_ACCESS_TOKEN:'test-token',
+      APP_ORIGIN:'https://gregncheese.github.io',
+      DIRECT_WEB_DISCOVERY:'true',ENABLE_GOOGLE_SEARCH:'false'
+    });
+    assert.equal(response.status,200);
+    const out=await response.json();
+    assert.equal(out.suggestedCount,20);
+    assert.equal(out.suggestedCardsPerPack,7);
+    assert.equal(out.suggestedLanguage,'KR');
+    assert.equal(out.verifiedFields.boosters,true);
+    assert.equal(out.verifiedFields.cardsPerPack,true);
+    assert.equal(out.verifiedFields.language,true);
+    assert.equal(out.diagnostics.liveDiscovery.matchedProducts,1);
+    assert.ok(out.sources.some(x=>x.url?.includes('card-binder.com/products/pokemon-151-korean-booster-box')));
+    assert.equal(calls.some(u=>u.includes('generativelanguage.googleapis.com')),false);
+  } finally {globalThis.fetch=saved;}
+});

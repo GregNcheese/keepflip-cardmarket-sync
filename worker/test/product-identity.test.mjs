@@ -133,7 +133,7 @@ test('scoped official content removes cross-sell booster counts', async () => {
   const result = await fakeLookup({productName:named,productType:'bundle'},{
     official:{[source]:page},sets:[{name:'Paldean Fates',id:'sv4.5'}]
   });
-  assert.equal(result.version,'2.1.7');
+  assert.equal(result.version,'2.1.8');
   assert.equal(result.suggestedCount,6);
   assert.equal(result.suggestedCardsPerPack,10);
   assert.equal(result.suggestedSet,'Paldean Fates');

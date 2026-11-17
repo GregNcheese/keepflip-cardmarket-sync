@@ -1,9 +1,16 @@
+import { discoverLiveProductPages, matchesLiveProductTitle } from './live-product-search.js';
+import { discoverCardos, cardosUsage, cardosSearch, cardosGetProduct } from './cardos.js';
+import { renderCardosLab } from './cardos-lab.js';
+import { identifyCardosVision } from './cardos-vision.js';
+import {syncStatus,syncRead,syncWrite} from './device-sync.js';
+import { renderTestLab } from './testlab.js';
 import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfidence, explicitCardLanguage } from './autofill.js';
-import { matchingOfficialTitle, selectVerifiedProduct, scopedProductHtml } from './product-identity.js';
+import { matchingOfficialTitle, selectVerifiedProduct, scopedProductHtml, editionCompatible } from './product-identity.js';
+import { discoverProductWithGemini } from './gemini-discovery.js';
 import { extractNameHints } from './name-hints.js';
 
 /**
- * Keep & Flip – Productbronnen Worker 2.1.7 AUTOFILL TEST
+ * Keep & Flip – Productbronnen Worker 2.1.8 GEMINI SEARCH TEST
  *
  * GET /health
  * POST /lookup
@@ -23,7 +30,7 @@ import { extractNameHints } from './name-hints.js';
  * Geen voorraadmutaties.
  * Geen onbewezen gegevens automatisch bevestigen.
  */
-const VERSION = '2.1.7';
+const VERSION = '2.1.8';
 const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 const MAX_BODY = 3500;
 const SET_LANGUAGES = ['en', 'ja', 'ko', 'zh-cn', 'zh-tw'];
@@ -59,6 +66,13 @@ const RETAIL_DOMAINS = new Set([
   'www.pokeselect.nl',
   'cardmarket.com',
   'www.cardmarket.com',
+  'rarecards.nl',
+  'www.rarecards.nl',
+  'www.tcghobby.com',
+  'card-binder.com',
+  'pikamon.eu',
+  'www.danireon.com',
+  'gchobby.com',
   'tcgplayer.com',
   'www.tcgplayer.com'
 ]);
@@ -133,7 +147,17 @@ function reply(data, status = 200, origin = '') {
 function allowedOrigin(request, env) {
   const origin = request.headers.get('Origin') || '';
   const expected = String(env.APP_ORIGIN || '').trim();
-  return origin && origin === expected ? origin : '';
+  // Same-origin calls from the isolated Worker-hosted Testlab are allowed;
+  // the existing Bearer token remains required on /lookup.
+  const ownOrigin = new URL(request.url).origin;
+  // Isolated TEST preview may also serve an HTML file opened locally.
+  // This does NOT bypass the existing Bearer-token gate, and is explicitly
+  // disabled in production unless opted in via a TEST-only preview variable.
+  const localTestAllowed = origin === 'null' &&
+    String(env.CARDOS_TEST_ALLOW_FILE_ORIGIN || '').toLowerCase() === 'true' &&
+    String(env.DIRECT_WEB_DISCOVERY || '').toLowerCase() === 'true';
+  return origin && (origin === expected || origin === ownOrigin || localTestAllowed)
+    ? origin : '';
 }
 async function tokenMatches(given, expected) {
   if (
@@ -309,7 +333,7 @@ function countFromText(text, type) {
   const patterns = type === 'packs'
     ? [
       new RegExp(
-        `\\b(${NUMBER})\\s*(?:x|×)?\\s*(?:[\\w&:—–-]+\\s+){0,10}booster\\s*packs?\\b`,
+        `\\b(${NUMBER})\\s*(?:x|×)?\\s*(?:(?:pok[eé]mon\\s+)?(?:tcg\\s+)?)?booster\\s*packs?\\b`,
         'gi'
       ),
       new RegExp(
@@ -342,16 +366,44 @@ function countFromText(text, type) {
       ),
       /(?:1パック|1팩|每包|每包裝|每包内)\s*(?:に|당|含|包括)?\s*(\d{1,3})\s*(?:枚|장|张|張)/gi
     ];
+  if (type === 'packs') {
+    patterns.push(
+      /\b(?:number of|aantal)\s+(?:booster\s*)?packs?\s+per\s+(?:box|doos)\s*[:：–-]?\s*(\d{1,3})\b/gi,
+      /\b(?:number of|aantal)\s+boosters?\s+per\s+(?:box|doos)\s*[:：–-]?\s*(\d{1,3})\b/gi,
+      /\b(?:inhoud|contents?)\s*[:：]\s*(\d{1,3})\s+booster\s*packs?\s+per\s+box\b/gi,
+      /\b(?:1\s*)?box\s*[:=]\s*(\d{1,3})\s*(?:booster\s*)?packs?\b/gi,
+      /\b(?:1\s*)?box\s*[:=]\s*(\d{1,3})\s*[×x]?\s*(?:[a-z0-9.'-]+\s+){0,8}booster\s*packs?\b/gi
+    );
+  } else {
+    patterns.push(
+      /\b(?:number of|aantal)\s+(?:kaarten|cards?)\s+per\s+(?:booster\s*)?pack\s*[:：–-]?\s*(\d{1,3})\b/gi,
+      /\b(?:aantal|number of)\s+(?:kaarten|cards?)\s+per\s+booster\s*[:：–-]?\s*(\d{1,3})\b/gi,
+      /\b(?:1\s*)?(?:booster\s*)?pack\s*[:=]\s*(\d{1,3})\s*(?:game\s*)?cards?\b/gi,
+      /\b(?:1\s*)?(?:booster\s*)?pack\s*[:=]\s*(\d{1,3})\s*[×x]?\s*(?:(?:guaranteed|holo|foil|game|rare|additional)\s+){0,6}cards?\s*(?:per\s+pack)?\b/gi
+    );
+  }
   const numbers = [];
+  const input = String(text);
   for (const pattern of patterns) {
-    for (const match of String(text).matchAll(pattern)) {
-      const n = readNumber(match[1]);
-      if (n !== null) numbers.push(n);
+    for (const match of input.matchAll(pattern)) {
+      // "Gem Pack Vol. 7 Booster Packs" is a set name, not a box quantity.
+      const preceding = input.slice(Math.max(0, match.index - 24), match.index);
+      if (type === 'packs' &&
+          /\b(?:vol(?:ume)?|series|set)\.?\s*$/i.test(preceding)) continue;
+      const value = readNumber(match[1]);
+      if (value !== null) numbers.push(value);
     }
   }
-  const unique = [...new Set(numbers)];
+  // A sealed retail box normally contains <=60 boosters; a booster card
+  // count <=30. This protects against set identifiers ("151 booster"),
+  // protective-sleeve quantities ("70 sleeves"), and unrelated accessories.
+  // Larger unusual products stay unverified until explicit specialist logic.
+  const maximum = type === 'packs' ? 60 : 30;
+  const unique = [...new Set(numbers.filter(value => value <= maximum))];
   if (unique.length > 1) return null;
-  return mergeCountEvidence(unique.length === 1 ? unique[0] : null, additionalCount(text, type === 'packs' ? 'packs' : 'cards'));
+  const extra = additionalCount(text, type === 'packs' ? 'packs' : 'cards');
+  return mergeCountEvidence(unique.length === 1 ? unique[0] : null,
+    extra !== null && extra <= maximum ? extra : null);
 }
 function productLanguageFromText(text) {
   return explicitCardLanguage(text);
@@ -445,7 +497,7 @@ function exactRetailTitleMatches(html, name, type) {
       /<(?:h1|title)\b[^>]*>([\s\S]*?)<\/(?:h1|title)>/gi
     )
   ]
-    .map(x => norm(htmlText(x[1])))
+    .map(x => htmlText(x[1]))
     .filter(Boolean);
   const required = norm(name)
     .split(' ')
@@ -464,17 +516,86 @@ function exactRetailTitleMatches(html, name, type) {
     'traditional chinese'
   ];
   const requested = norm(name);
-  return heads.some(h =>
-    required.every(word =>
+  return heads.some(heading => {
+    const h = norm(heading);
+    return required.every(word =>
       h.split(' ').includes(word)
     ) &&
     qualifiers.every(q =>
       !requested.includes(q) || h.includes(q)
     ) &&
+    editionCompatible(name, heading) &&
     (type !== 'etb' || h.includes('trainer')) &&
-    (type !== 'bundle' || h.includes('bundle'))
-  );
+    (type !== 'bundle' || h.includes('bundle'));
+  });
 }
+// Product storefronts can redirect /en/products/x to /products/x.
+// Compare only canonical paths on the SAME approved HTTPS origin.
+function sameRetailProduct(left, right) {
+  try {
+    const a = new URL(left);
+    const b = new URL(right);
+    const canonical = u => u.pathname
+      .replace(/^\/(?:[a-z]{2}(?:-[a-z]{2})?)\/products\//, '/products/')
+      .replace(/\/$/, '');
+    return a.protocol === 'https:' &&
+      a.origin === b.origin && canonical(a) === canonical(b);
+  } catch { return false; }
+}
+// Shopify's documented public Ajax Product API: /products/{handle}.js.
+// Use it only after a storefront result AND the actual product page have
+// passed exact identity checks. This is not a product list or scraper feed.
+
+// Product JSON contains merchant's own product details, not general website
+// language. Accept its explicit "Language Traditional Chinese" label, while
+// preserving the strict card-language rules for broad website HTML.
+function productJsonCardLanguage(text) {
+  const direct = productLanguageFromText(text);
+  const labels = [...String(text || '').matchAll(
+    /\blanguage\s*[:：–-]?\s*(traditional chinese|simplified chinese|english|japanese|korean)\b/gi
+  )].map(m => productLanguageFromText('card ' + m[0])).filter(Boolean);
+  const all = [...new Set([direct, ...labels].filter(Boolean))];
+  return all.length === 1 ? all[0] : null;
+}
+
+async function fetchLiveProductJson(sourceUrl, name, type, language) {
+  let url;
+  try {
+    const source = new URL(sourceUrl);
+    if (!['rarecards.nl', 'www.cardnation.nl', 'www.tcghobby.com',
+      'card-binder.com', 'pikamon.eu', 'www.danireon.com', 'gchobby.com'].includes(source.hostname) ||
+      source.protocol !== 'https:' || source.port ||
+      source.username || source.password) return { status:'invalid-host' };
+    const match = source.pathname.match(/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?products\/([a-z0-9-]{2,150})\/?$/i);
+    if (!match) return { status:'invalid-product-path' };
+    url = source.origin + '/products/' + match[1] + '.js';
+  } catch { return { status:'invalid-url' }; }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4500);
+  try {
+    const response = await fetch(url, {
+      signal:controller.signal, redirect:'manual',
+      headers:{ Accept:'application/json' },
+      cf:{ cacheTtl:1800 }
+    });
+    if (!response.ok || Number(response.headers.get('content-length') || 0)>260000 ||
+        !/^(?:application\/json|application\/javascript|text\/javascript)(?:\s*;|$)/i.test(String(response.headers.get('content-type') || '')))
+      return { status:'http-' + response.status };
+    const raw=await response.text();
+    if (raw.length > 260000) return { status:'oversize' };
+    const json=JSON.parse(raw);
+    const title=String(json?.title || '').slice(0,240);
+    if (!title || !matchesLiveProductTitle(name,title,type,language))
+      return { status:'different-product' };
+    const description=String(json?.description || '').slice(0,32000);
+    return {
+      status:'verified-title', text:htmlText(description),
+      title, url:sourceUrl
+    };
+  } catch { return { status:'unreachable' }; }
+  finally { clearTimeout(timer); }
+}
+
 async function fetchRetail(url, env, hops = 0) {
   const safe = safeRetailUrl(url, env);
   if (!safe) {
@@ -552,118 +673,7 @@ async function fetchRetail(url, env, hops = 0) {
     clearTimeout(timer);
   }
 }
-async function discoverRetailUrls(env, name, type) {
-  if (
-    String(env.ENABLE_GOOGLE_SEARCH || '')
-      .toLowerCase() !== 'true'
-  ) {
-    return {
-      status: 'disabled',
-      urls: [],
-      used: false
-    };
-  }
-  if (!env.GEMINI_API_KEY) {
-    return {
-      status: 'no-key',
-      urls: [],
-      used: false
-    };
-  }
-  const c = new AbortController();
-  const timer = setTimeout(
-    () => c.abort(),
-    11500
-  );
-  try {
-    const model = String(
-      env.GEMINI_MODEL || DEFAULT_MODEL
-    ).trim();
-    if (!/^gemini-[a-z0-9.-]{1,60}$/.test(model)) {
-      return {
-        status: 'invalid-model',
-        urls: [],
-        used: false
-      };
-    }
-    const prompt =
-      'Find up to 3 DIRECT product-page URLs on trustworthy retailers for this exact sealed Pokemon TCG product: ' +
-      JSON.stringify(name) +
-      '; type: ' + type +
-      '. Be exact about edition and language. ' +
-      'Return direct HTTPS product URLs, one per line, no explanation. No category or search pages.';
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: 'POST',
-        signal: c.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': env.GEMINI_API_KEY
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }]
-            }
-          ],
-          tools: [
-            { googleSearch: {} }
-          ],
-          generationConfig: {
-            temperature: 0,
-            maxOutputTokens: 500
-          }
-        })
-      }
-    );
-    if (!r.ok) {
-      return {
-        status: 'http-' + r.status,
-        urls: [],
-        used: false
-      };
-    }
-    const json = await r.json();
-    const candidate = json.candidates?.[0] || {};
-    const grounded =
-      candidate.groundingMetadata?.groundingChunks || [];
-    const raw = (
-      candidate.content?.parts || []
-    )
-      .map(p => p.text || '')
-      .join(' ');
-    const candidateUrls = [
-      ...raw.matchAll(/https:\/\/[^\s<>"'`]+/g)
-    ].map(m =>
-      m[0].replace(/[).,;]+$/, '')
-    );
-    const citationUrls = grounded
-      .map(item => item.web?.uri)
-      .filter(Boolean);
-    return {
-      status: grounded.length
-        ? 'grounded-links'
-        : 'no-grounding',
-      used: grounded.length > 0,
-      urls: [
-        ...new Set(
-          [...citationUrls, ...candidateUrls]
-            .map(u => safeRetailUrl(u, env))
-            .filter(Boolean)
-        )
-      ].slice(0, 4)
-    };
-  } catch {
-    return {
-      status: 'request-failed',
-      urls: [],
-      used: false
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
+
 async function findSet(name, language) {
   const preferred = {
     EN: 'en',
@@ -1230,14 +1240,17 @@ async function lookup(data, env) {
     out.fieldConfidence = { productType: 'conflict' };
     return out;
   }
-  const curated = CURATED.find(
+  // In live-discovery preview, no locally curated product values or
+  // prefilled register may satisfy an unknown product. Online evidence only.
+  const directLiveMode = String(env.DIRECT_WEB_DISCOVERY || '').toLowerCase() === 'true';
+  const curated = directLiveMode ? null : CURATED.find(
     item =>
       item.type === type &&
       item.names.some(
         alias => norm(alias) === norm(name)
       )
   );
-  const registry = curated
+  const registry = directLiveMode || curated
     ? null
     : await fromRegistry(
         env,
@@ -1291,6 +1304,63 @@ async function lookup(data, env) {
       'product-reference'
     );
   }
+  // CardOS is the primary exact sealed-product source when its Cloudflare
+  // secret is configured. It uses only public product name/type/language.
+  // On 402/403/429/5xx/no-match/incomplete fields the existing catalog,
+  // Gemini and storefront fallbacks continue unchanged.
+  const cardosResult = record
+    ? { status:'skipped-existing-record' }
+    : await discoverCardos(env, name, type, language);
+  out.diagnostics.cardos = {
+    status:cardosResult.status,
+    creditsRemaining:cardosResult.creditsRemaining ?? null,
+    creditsCost:cardosResult.creditsCost ?? null,
+    searchResultCount:cardosResult.searchResultCount ?? null,
+    candidates:cardosResult.candidates?.slice(0,5).map(p=>({
+      id:p.id,name:p.name,productType:p.productType,language:p.language
+    })) || []
+  };
+  if(cardosResult.status==='matched' && cardosResult.product) {
+    const p = cardosResult.product;
+    const sourceUrl = 'https://service.rip.fun/api/v1/pokemon/sealed/' +
+      encodeURIComponent(p.id);
+    out.cardos = {
+      product:{ ...p }, // public catalog metadata only; no secret or raw headers
+      sourceUrl
+    };
+    if (p.productType === type) {
+      out.verifiedFields.productType = true;
+      out.provisionalFields.productType = false;
+      out.suggestedProductType = type;
+      out.evidence.productType = 'cardos-product-exact-match';
+    }
+    applyField(out, 'boosters', p.packCount,
+      'cardos-sealed-api',sourceUrl,'CardOS sealed product API','cardos-product');
+    applyField(out, 'cardsPerPack', p.cardsPerPack,
+      'cardos-sealed-api',sourceUrl,'CardOS sealed product API','cardos-product');
+    applyField(out, 'language', p.language,
+      'cardos-sealed-api',sourceUrl,'CardOS sealed product API','cardos-product');
+    applyField(out, 'set', p.set,
+      'cardos-sealed-api',sourceUrl,'CardOS sealed product API','cardos-product');
+  }
+  const completeCardos = !!(
+    out.verifiedFields.cardsPerPack &&
+    (type==='pack' || out.verifiedFields.boosters) &&
+    out.verifiedFields.language &&
+    out.verifiedFields.set &&
+    out.verifiedFields.productType
+  );
+  // Search the public web and TCGdex concurrently where available.
+  // This avoids making users wait for five set-catalog calls before Search.
+  const livePromise = record || completeCardos ? null :
+    discoverLiveProductPages(env, name, type, language);
+  // Direct source lookup is the default in the preview. Paid Google-grounding
+  // is NOT called when DIRECT_WEB_DISCOVERY is enabled.
+  const discoveryPromise = record || completeCardos ||
+    String(env.DIRECT_WEB_DISCOVERY || '').toLowerCase() === 'true'
+    ? null : discoverProductWithGemini(
+      env, name, type, language, officialUrl, u => safeRetailUrl(u, env)
+    );
   if (!out.suggestedSet) {
     const set = await findSet(name, language);
     if (set) {
@@ -1317,23 +1387,53 @@ async function lookup(data, env) {
         : []
     )
   ];
+  // Source discovery for unknown sealed products: one grounded Search query
+  // per request at most. AI numbers are ignored; fetched pages prove fields.
+  const live = livePromise ? await livePromise : {
+    status: record ? 'skipped-existing-product-record' : 'disabled',
+    retailUrls: [], diagnostics: []
+  };
+  out.diagnostics.liveDiscovery = {
+    status: live.status,
+    matchedProducts: live.retailUrls.length,
+    providers: live.diagnostics
+  };
+  const discovery = discoveryPromise ? await discoveryPromise : {
+    status: record ? 'skipped-existing-product-record' : 'disabled-direct-search',
+    groundingUsed: false, officialUrls: [], retailUrls: [],
+    searchQueries: [], searchSuggestionsHtml: ''
+  };
+  out.googleSearchEnabled = String(env.ENABLE_GOOGLE_SEARCH || '').toLowerCase() === 'true';
+  out.groundingUsed = discovery.groundingUsed;
+  out.geminiResponded = discovery.groundingUsed;
+  out.diagnostics.googleDiscovery = {
+    status: discovery.status,
+    officialCandidates: discovery.officialUrls.length,
+    retailerCandidates: discovery.retailUrls.length,
+    queryCount: discovery.searchQueries.length,
+    // No raw Gemini error message or secret is sent to the browser.
+    errorStatus: discovery.errorStatus || null,
+    errorCategory: discovery.errorCategory || null,
+    retryAfterSeconds: discovery.retryAfterSeconds ?? null
+  };
+  out.searchSuggestionsHtml = discovery.searchSuggestionsHtml;
   const urls = candidateUrls(
     name,
     [
       ...supplied,
-      ...(
-        record?.url
-          ? [record.url]
-          : []
-      )
+      ...(record?.url ? [record.url] : []),
+      ...discovery.officialUrls
     ]
   );
   if (
-    !record ||
-    !out.suggestedCount ||
-    !out.suggestedCardsPerPack ||
-    !out.suggestedLanguage ||
-    !out.suggestedSet
+    !completeCardos &&
+    (
+      !record ||
+      !out.suggestedCount ||
+      !out.suggestedCardsPerPack ||
+      !out.suggestedLanguage ||
+      !out.suggestedSet
+    )
   ) {
     const checked = await Promise.all(
       urls.map(url => fetchOfficial(url))
@@ -1460,23 +1560,14 @@ async function lookup(data, env) {
         Array.isArray(data.secondarySourceUrls)
           ? data.secondarySourceUrls.slice(0, 3)
           : [];
-      const discovered = await discoverRetailUrls(
-        env,
-        name,
-        type
-      );
-      out.diagnostics.secondarySearch =
-        discovered.status;
-      out.groundingUsed = discovered.used;
-      out.googleSearchEnabled =
-        String(env.ENABLE_GOOGLE_SEARCH || '')
-          .toLowerCase() === 'true';
+      out.diagnostics.secondarySearch = discovery.status;
       const secondaryUrls = [
         ...new Set(
           [
             ...(seed?.urls || []),
             ...providedSecondary,
-            ...discovered.urls
+            ...live.retailUrls,
+            ...discovery.retailUrls
           ]
             .map(u => safeRetailUrl(u, env))
             .filter(Boolean)
@@ -1492,27 +1583,69 @@ async function lookup(data, env) {
           url: x.url,
           status: x.status,
           titleMatch: !!(
-            x.html &&
-            exactRetailTitleMatches(
-              x.html,
-              name,
-              type
+            x.html && (
+              live.retailUrls.some(source => sameRetailProduct(source, x.url))
+                ? [...x.html.matchAll(/<(?:h1|title)\b[^>]*>([\s\S]*?)<\/(?:h1|title)>/gi)]
+                    .some(m => matchesLiveProductTitle(
+                      name, htmlText(m[1]), type, language
+                    ))
+                : exactRetailTitleMatches(x.html, name, type)
             )
           )
         }));
       for (const item of checkedRetail) {
-        if (
-          !item.html ||
-          !exactRetailTitleMatches(
-            item.html,
-            name,
-            type
-          )
-        ) continue;
-        const text = htmlText(scopedProductHtml(item.html));
-        const packs = countFromText(text, 'packs');
-        const cards = countFromText(text, 'cards');
-        const lang = productLanguageFromText(text);
+        const isLiveCandidate = live.retailUrls.some(source => sameRetailProduct(source, item.url));
+        const matchLive = isLiveCandidate &&
+          [...String(item.html || '').matchAll(/<(?:h1|title)\b[^>]*>([\s\S]*?)<\/(?:h1|title)>/gi)]
+            .some(x => matchesLiveProductTitle(
+              name, htmlText(x[1]), type, language
+            ));
+        // Shopify page HTML can render a shortened or localized heading.
+        // Read its exact product JSON only after the Shopify search and product
+        // path were approved; independent JSON title MUST match requested product.
+        const json = isLiveCandidate
+          ? await fetchLiveProductJson(item.url, name, type, language)
+          : { status:'not-live' };
+        if (isLiveCandidate) {
+          if (!out.diagnostics.productJsonFetch) out.diagnostics.productJsonFetch = [];
+          out.diagnostics.productJsonFetch.push({
+            url:item.url, status:json.status
+          });
+        }
+        // Do not accept a loose legacy match if a strict live candidate fails.
+        const titleMatch = isLiveCandidate
+          ? (matchLive || json.status === 'verified-title')
+          : exactRetailTitleMatches(item.html, name, type);
+        if ((!item.html && json.status !== 'verified-title') || !titleMatch) continue;
+        const diagnostic = out.diagnostics.secondaryFetch?.find(x => x.url === item.url);
+        if (diagnostic) {
+          diagnostic.titleMatch = true;
+          diagnostic.titleEvidence = matchLive
+            ? 'live-html-title'
+            : json.status === 'verified-title'
+              ? 'independent-shopify-json-title'
+              : 'legacy-title';
+        }
+        // The product type is verified either by the strict live HTML title
+        // or by independently fetched exact Shopify product JSON.
+        if (isLiveCandidate) {
+          out.suggestedProductType = type;
+          out.verifiedFields.productType = true;
+          out.provisionalFields.productType = false;
+          out.evidence.productType = matchLive
+            ? 'verified-retailer-product-title'
+            : 'verified-shopify-product-json-title';
+        }
+        const text = item.html ? htmlText(scopedProductHtml(item.html)) : '';
+        // JSON description is the actual product body, unlike broad storefront
+        // HTML which may include unrelated items, popups, and recommendations.
+        const productText = json.status === 'verified-title' && json.text
+          ? json.text : text;
+        const packs = countFromText(productText, 'packs');
+        const cards = countFromText(productText, 'cards');
+        const lang = json.status === 'verified-title'
+          ? productJsonCardLanguage(productText)
+          : productLanguageFromText(productText);
         applyField(
           out,
           'boosters',
@@ -1540,7 +1673,10 @@ async function lookup(data, env) {
           'Onafhankelijke productpagina',
           'retailer-product'
         );
+        // When live sources disagree, applyField must see ALL matching pages.
+        // An early break would conceal contradictory counts or language.
         if (
+          !live.retailUrls.length &&
           out.verifiedFields.cardsPerPack &&
           out.verifiedFields.boosters &&
           out.verifiedFields.language
@@ -1914,6 +2050,34 @@ export default {
   async fetch(request, env) {
     const path = new URL(request.url).pathname;
     const origin = allowedOrigin(request, env);
+    if (request.method === 'GET' && path === '/cardos-lab') {
+      return new Response(renderCardosLab(), {
+        status:200,
+        headers: {
+          'Content-Type':'text/html; charset=utf-8',
+          'Cache-Control':'no-store',
+          'X-Content-Type-Options':'nosniff',
+          'X-Robots-Tag':'noindex, nofollow',
+          'Referrer-Policy':'no-referrer',
+          'X-Frame-Options':'DENY',
+          'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src https://api.rip.fun https://api.getcardos.com https://gjnrvwqtdlspyfpezgox.supabase.co; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+        }
+      });
+    }
+    if (request.method === 'GET' && path === '/testlab') {
+      return new Response(renderTestLab(), {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'X-Robots-Tag': 'noindex, nofollow',
+          'X-Content-Type-Options': 'nosniff',
+          'Referrer-Policy': 'no-referrer',
+          'X-Frame-Options': 'DENY',
+          'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+        }
+      });
+    }
     if (
       request.method === 'GET' &&
       (
@@ -1928,10 +2092,14 @@ export default {
           env.GEMINI_MODEL || DEFAULT_MODEL,
         geminiConfigured:
           !!env.GEMINI_API_KEY,
+        cardosConfigured: !!env.CARDOS_API_KEY,
+        cardosVisionAvailable: !!env.CARDOS_API_KEY,
+        deviceSyncConfigured: !!env.KF_SYNC_DB?.prepare,
         accessConfigured:
           !!env.KEEPFLIP_ACCESS_TOKEN,
         registryConfigured:
           !!registryUrl(env.KEEPFLIP_REGISTRY_URL),
+        liveSearchEnabled: String(env.DIRECT_WEB_DISCOVERY || '').toLowerCase() === 'true',
         googleSearchEnabled:
           String(env.ENABLE_GOOGLE_SEARCH || '')
             .toLowerCase() === 'true'
@@ -1939,7 +2107,7 @@ export default {
     }
     if (
       request.method === 'OPTIONS' &&
-      (path === '/lookup' || path === '/image-lookup' || path === '/image')
+      (path === '/lookup' || path === '/image-lookup' || path === '/image' || path === '/cardos/test' || path === '/cardos/vision' || path === '/sync/snapshot' || path === '/sync/status')
     ) {
       if (!origin) {
         return reply({
@@ -1960,8 +2128,8 @@ export default {
       });
     }
     if (
-      !(request.method === 'POST' && (path === '/lookup' || path === '/image-lookup')) &&
-      !(request.method === 'GET' && path === '/image')
+      !(request.method === 'POST' && (path === '/lookup' || path === '/image-lookup' || path === '/cardos/test' || path === '/cardos/vision' || path === '/sync/snapshot')) &&
+      !(request.method === 'GET' && (path === '/image' || path === '/sync/status' || path === '/sync/snapshot'))
     ) {
       return reply({
         error: 'Niet gevonden'
@@ -1998,17 +2166,24 @@ export default {
       if (path === '/image') {
         return await serveVerifiedImage(new URL(request.url).searchParams.get('url'), request, origin);
       }
+      // Authenticated read-only private snapshot endpoints.
+      if (request.method === 'GET' && path === '/sync/status')
+        return reply(await syncStatus(env),200,origin);
+      if (request.method === 'GET' && path === '/sync/snapshot')
+        return reply(await syncRead(env),200,origin);
+      const payloadLimit = path === '/cardos/vision' ? 14_100_000 :
+        path === '/sync/snapshot' ? 1_500_000 : MAX_BODY;
       if (
         Number(
           request.headers.get('Content-Length') || 0
-        ) > MAX_BODY
+        ) > payloadLimit
       ) {
         return reply({
           error: 'Te groot'
         }, 413, origin);
       }
       const raw = await request.text();
-      if (raw.length > MAX_BODY) {
+      if (raw.length > payloadLimit) {
         return reply({
           error: 'Te groot'
         }, 413, origin);
@@ -2020,6 +2195,37 @@ export default {
         return reply({
           error: 'Ongeldige JSON'
         }, 400, origin);
+      }
+      if (request.method === 'POST' && path === '/sync/snapshot') {
+        const result=await syncWrite(env,data);
+        return reply(result,
+          result.status==='conflict'?409:
+          result.status==='invalid-input'?400:
+          result.status==='payload-too-large'?413:200,
+          origin);
+      }
+      if(path === '/cardos/vision') {
+        // Existing Bearer-token and origin checks have already passed.
+        // Paid identification is permitted only as the explicitly marked
+        // zero-result fallback for a user-initiated photo scan.
+        const result = await identifyCardosVision(env,data);
+        return reply(result,200,origin);
+      }
+      if(path === '/cardos/test') {
+        const action = String(data?.action || '');
+        let info;
+        if(action==='usage') info = await cardosUsage(env);
+        else if(action==='search') info = await cardosSearch(
+          env,String(data?.productName||'').slice(0,150),
+          String(data?.productType||'box'),
+          languageCode(data?.language)
+        );
+        else if(action==='get') info = await cardosGetProduct(
+          env,String(data?.productId||'').slice(0,110)
+        );
+        else return reply({error:'Ongeldige CardOS-testactie'},400,origin);
+        // A safe diagnostic response only; never forward CardOS error bodies.
+        return reply(info,200,origin);
       }
       const out = path === '/image-lookup'
         ? await imageLookup(data, env)
@@ -2038,3 +2244,6 @@ export default {
     }
   }
 };
+
+// Pure helper exported for regression tests; no public HTTP exposure.
+export { countFromText };

@@ -83,7 +83,7 @@ test('conflicting count evidence cannot be auto-verified', () => {
 test('autofills exactly matched verified registry fields and inferred type', async () => {
   const result = await lookup({productName, productType: 'other', cardmarketProductId: '987654'},
     [registryProduct()]);
-  assert.equal(result.version, '2.1.7');
+  assert.equal(result.version, '2.1.8');
   assert.equal(result.productType, 'bundle');
   assert.equal(result.suggestedProductType, 'bundle');
   assert.equal(result.suggestedCount, 6);

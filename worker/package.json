@@ -1,6 +1,6 @@
 {
   "name": "keepflip-cloudflare-worker",
-  "version": "2.1.7-autofill-test",
+  "version": "2.1.8-gemini-autofill-test",
   "private": true,
   "type": "module",
   "scripts": {
