@@ -10,6 +10,7 @@ import csv
 import datetime as dt
 import json
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.request import urlopen,Request
 
@@ -51,8 +52,10 @@ def source_rows(lang,doc):
         setname=sets.get(setid)
         if not setname or not number or not name:continue
         img=row[4] if len(row)>4 else ""
-        rows.append(make_case(lang,name,setname,number,"TCGdex",
-            img, "https://api.tcgdex.net/v2/"+lang+"/cards/"+card_id))
+        case=make_case(lang,name,setname,number,"TCGdex",
+            img, "https://api.tcgdex.net/v2/"+lang+"/cards/"+card_id)
+        case["sourceSetId"]=setid
+        rows.append(case)
     return rows
 def year_by_set(lang,get=get_json):
     try:
@@ -66,6 +69,39 @@ def year_by_set(lang,get=get_json):
         return result
     except (OSError,ValueError,TypeError):
         return {}
+def era_bucket(row):
+    year=row.get("year")
+    if year:return year_bucket(year)
+    sid=str(row.get("sourceSetId") or "").lower()
+    if sid.startswith(("base","gym","neo","ecard","ec","ex")):return "1996-2004"
+    if sid.startswith(("dp","pl","hgss","hg","l","pt")):return "2005-2009"
+    if sid.startswith(("bw","bwp","xy","xyp")):return "2010-2014"
+    if sid.startswith(("sm","smp")):return "2015-2019"
+    if sid.startswith(("swsh","swshp")):return "2020-2022"
+    if sid.startswith(("sv","svp","me","m1","m2")):return "2023-2027"
+    return "unknown"
+
+def resolve_source_years(cases,get):
+    targets={(c["language"],c.get("sourceSetId")) for c in cases if c.get("sourceSetId")}
+    def one(v):
+        lang,sid=v
+        try:
+            doc=get("https://api.tcgdex.net/v2/"+lang+"/sets/"+sid)
+            if not isinstance(doc,dict):return (v,None)
+            y=int(str(doc.get("releaseDate",""))[:4])
+            return (v,y if 1995<=y<=2027 else None)
+        except (OSError,ValueError,TypeError):
+            return (v,None)
+    years={}
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        for entry,year in executor.map(one,sorted(targets)):
+            years[entry]=year
+    for c in cases:
+        c["year"]=years.get((c["language"],c.get("sourceSetId")),c["year"])
+    print("DATED_CASES",sum(c["year"] is not None for c in cases),
+       "distinct years",sorted({c["year"] for c in cases if c["year"]}))
+    return cases
+
 def year_bucket(year):
     if not year:return "unknown"
     if year<=2004:return "1996-2004"
@@ -79,7 +115,7 @@ def pick_diverse(candidates,amount,already):
     result=[];seen_set=set()
     filtered=[r for r in candidates if key(r) not in already]
     bins=defaultdict(list)
-    for r in filtered:bins[year_bucket(r["year"])].append(r)
+    for r in filtered:bins[era_bucket(r)].append(r)
     for rows in bins.values():
         rows.sort(key=lambda r:(digits(r["set"]),digits(r["number"]),digits(r["name"])))
     bucket_order=["1996-2004","2005-2009","2010-2014","2015-2019","2020-2022","2023-2027","unknown"]
@@ -157,7 +193,8 @@ def build(destination,archive=None,universal=None,get=get_json):
     for r in allcases:
         if not r["name"] or not r["set"] or not r["number"] or r["language"] not in QUOTAS:
             raise ValueError("Invalid case")
-    allcases.sort(key=lambda r:(["en","ja","ko","zh-cn","zh-tw"].index(r["language"]),year_bucket(r["year"]),r["set"].casefold(),r["number"],r["name"]))
+    resolve_source_years(allcases,get)
+    allcases.sort(key=lambda r:(["en","ja","ko","zh-cn","zh-tw"].index(r["language"]),era_bucket(r),r["set"].casefold(),r["number"],r["name"]))
     for i,r in enumerate(allcases,1):r["caseId"]=f"TC-{i:03d}"
     payload={"schema":"keepflip-photo-benchmark-v1","generatedAt":dt.datetime.now(dt.timezone.utc).isoformat(),
       "count":200,"languageCounts":dict(Counter(r["language"] for r in allcases)),
