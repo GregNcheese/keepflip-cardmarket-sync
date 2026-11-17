@@ -1,0 +1,57 @@
+name: Keep & Flip TEST — old Japanese image index (NO APIs)
+on:
+  push:
+    branches: [test/japanese-photo-archive-22121]
+    paths:
+      - scripts/build_japanese_photo_archive.py
+      - tests/test_japanese_photo_archive.py
+      - .github/workflows/japanese-photo-index-22121.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: keepflip-japanese-photo-archive-22121
+  cancel-in-progress: false
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify strict identity parsing offline
+        run: python -m unittest discover -s tests -p test_japanese_photo_archive.py -v
+      - name: Fetch public Japanese card LISTS (URL metadata, no image bytes, no keys)
+        run: |
+          python scripts/build_japanese_photo_archive.py \
+            --out test-data/japanese-photo-22121/index.json \
+            --previous test-data/japanese-photo-22121/index.json
+      - name: Assert test case is really in live index
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          doc=json.loads(Path('test-data/japanese-photo-22121/index.json').read_text())
+          cards=[r for r in doc['cards'] if r['name'].lower()=='ninetales'
+                 and r['set'].lower()=='ex battle boost' and r['number']=='013/093']
+          assert cards and cards[0]['language']=='ja', 'Ninetales EBB 013 missing, do not publish'
+          assert doc['cardCount']>=50, 'insufficient index coverage'
+          print('VERIFIED_NINETALES_EBB',cards[0]['imageUrl'])
+          print('TOTAL_INDEXED_JAPANESE',doc['cardCount'])
+          PY
+      - name: Commit public metadata (no image files)
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add test-data/japanese-photo-22121/index.json
+          if ! git diff --cached --quiet; then
+            git commit -m "test(data): refresh Japanese card photo URLs only [skip ci]"
+            git push origin HEAD:test/japanese-photo-archive-22121
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: japanese-card-photo-index-metadata-only
+          path: test-data/japanese-photo-22121/index.json
+          retention-days: 14
