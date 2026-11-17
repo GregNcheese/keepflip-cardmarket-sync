@@ -204,7 +204,7 @@ def build(destination,archive=None,universal=None,get=get_json):
       "cases":allcases}
     (out/"benchmark-200.json").write_text(json.dumps(payload,ensure_ascii=False,indent=2))
     with (out/"benchmark-200.csv").open("w",newline="",encoding="utf-8-sig") as f:
-        w=csv.DictWriter(f,fieldnames=["caseId","language","languageLabel","year","set","name","number","scenario","source","sourceUrl","referencePhotoUrl","expected","status"])
+        w=csv.DictWriter(f,extrasaction="ignore",fieldnames=["caseId","language","languageLabel","year","set","sourceSetId","name","number","scenario","source","sourceUrl","referencePhotoUrl","expected","status"])
         w.writeheader();w.writerows(allcases)
     print("BENCHMARK_200",payload["count"],"LANGUAGES",payload["languageCounts"],"SETS",payload["uniqueSets"],"YEARS",payload["uniqueYears"])
     return payload
