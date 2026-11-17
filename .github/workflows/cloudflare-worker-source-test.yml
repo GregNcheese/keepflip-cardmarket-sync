@@ -6,6 +6,7 @@ on:
       - test/cloudflare-worker-autofill-216
       - test/cloudflare-worker-autofill-217
       - test/cloudflare-worker-gemini-autofill-218
+      - test/keepflip-sync-and-prices
     paths:
       - "worker/**"
       - ".github/workflows/cloudflare-worker-source-test.yml"

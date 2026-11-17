@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 import urllib.request
 import time
+import hashlib
+import math
 
 BASE = 'https://downloads.s3.cardmarket.com/productCatalog/'
 SOURCE = {
@@ -45,6 +47,17 @@ def validated(kind, data):
         raise ValueError(f'{kind}: missing source date')
     if not all(isinstance(row, dict) and isinstance(row.get('idProduct'), int) and row['idProduct'] > 0 for row in raw):
         raise ValueError(f'{kind}: invalid product IDs')
+    # Reject obviously invalid guides before any GitHub Pages deployment.
+    if kind == 'prices':
+        for row in raw:
+            for field in ('avg', 'low', 'trend', 'avg1', 'avg7', 'avg30',
+                          'avg-holo', 'low-holo', 'trend-holo', 'avg1-holo',
+                          'avg7-holo', 'avg30-holo'):
+                value = row.get(field)
+                if value is not None and (isinstance(value, bool) or
+                    not isinstance(value, (int, float)) or
+                    not math.isfinite(value) or value < 0):
+                    raise ValueError(f'prices: invalid numeric field {field}')
     return raw
 
 
@@ -58,6 +71,10 @@ def slim(kind, raw, date):
               'idMetacard', 'number', 'variant', 'expansionName', 'rarity', 'imageUrl')
     records = [{key: r.get(key) for key in fields if r.get(key) is not None} for r in raw]
     return {'version':1, 'createdAt':date, 'products':records}
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def write_json(path: Path, data):
@@ -85,13 +102,41 @@ def build(outdir: Path, cache_dir: Path, source_dir: Path | None, refresh_catalo
             raw_data = download(SOURCE[kind])
             if kind != 'prices': write_json(cache_file, raw_data)
         rows = validated(kind, raw_data)
+        if kind == 'prices':
+            # Keep the previously published Pages deployment intact if the
+            # official daily feed unexpectedly loses most rows.
+            if cache_file.exists() and not source_dir:
+                try:
+                    previous = validated('prices', json.loads(cache_file.read_text(encoding='utf-8')))
+                    if len(previous) >= 1000 and len(rows) < len(previous) * 0.75:
+                        raise ValueError(f'prices: source shrank from {len(previous)} to {len(rows)} rows')
+                except json.JSONDecodeError:
+                    pass
+            # Price cache is updated only AFTER the entire build passes
+            # freshness and publication validation below.
         obj = slim(kind, rows, raw_data['createdAt'])
         filename = kind+'.json'
         write_json(outdir/filename, obj)
         manifest['sources'][kind] = {'file':filename,'createdAt':raw_data['createdAt'],
-                                     'count':len(rows),'officialUrl':SOURCE[kind]}
+                                     'count':len(rows),'officialUrl':SOURCE[kind],
+                                     'sha256':sha256(outdir/filename),
+                                     'bytes':(outdir/filename).stat().st_size}
         print(f"{kind}: {len(rows):,} records; source {raw_data['createdAt']}; "
               f"output {(outdir/filename).stat().st_size/1048576:.1f} MiB")
+    # An unexpectedly old price guide is a FAILED update. The old published
+    # GitHub Pages deployment stays online; never overwrite it with stale data.
+    if not source_dir:
+        price_date = dt.datetime.fromisoformat(
+            str(manifest['sources']['prices']['createdAt']).replace('Z','+00:00')
+        )
+        if price_date.tzinfo is None:
+            price_date = price_date.replace(tzinfo=dt.timezone.utc)
+        age = dt.datetime.now(dt.timezone.utc)-price_date.astimezone(dt.timezone.utc)
+        if age > dt.timedelta(days=5) or age < dt.timedelta(days=-1):
+            raise ValueError(f'prices: official source date outside safe freshness window ({age})')
+    if not source_dir:
+        write_json(cache_dir/'prices.json', raw_data)
+    manifest['checks']={'pricesValidated':True,'sourceDatesValidated':True}
     write_json(outdir/'manifest.json', manifest)
     return manifest
 

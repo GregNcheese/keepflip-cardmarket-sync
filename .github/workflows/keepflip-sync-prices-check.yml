@@ -1,0 +1,37 @@
+name: Keep & Flip TEST — device sync + price integrity (NO SECRETS)
+on:
+  push:
+    branches:
+      - test/keepflip-sync-and-prices
+    paths:
+      - 'worker/**'
+      - 'scripts/build_data.py'
+      - 'tests/**'
+      - '.github/workflows/keepflip-sync-prices-check.yml'
+  pull_request:
+    paths:
+      - 'worker/**'
+      - 'scripts/build_data.py'
+      - 'tests/**'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify Cardmarket publish quality gates (no internet)
+        run: python -m unittest discover -s tests -p 'test_price_sync.py' -v
+      - name: Compile, security-test and simulate two-device D1 conflicts
+        run: |
+          npm --prefix worker install --no-audit --no-fund
+          npm --prefix worker run check
+          npm --prefix worker test
+          npm --prefix worker run check:cloudflare
