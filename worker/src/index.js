@@ -2,6 +2,7 @@ import { discoverLiveProductPages, matchesLiveProductTitle } from './live-produc
 import { discoverCardos, cardosUsage, cardosSearch, cardosGetProduct } from './cardos.js';
 import { renderCardosLab } from './cardos-lab.js';
 import { identifyCardosVision } from './cardos-vision.js';
+import {syncStatus,syncRead,syncWrite} from './device-sync.js';
 import { renderTestLab } from './testlab.js';
 import { inferProductType, additionalCount, mergeCountEvidence, labelFieldConfidence, explicitCardLanguage } from './autofill.js';
 import { matchingOfficialTitle, selectVerifiedProduct, scopedProductHtml, editionCompatible } from './product-identity.js';
@@ -2093,6 +2094,7 @@ export default {
           !!env.GEMINI_API_KEY,
         cardosConfigured: !!env.CARDOS_API_KEY,
         cardosVisionAvailable: !!env.CARDOS_API_KEY,
+        deviceSyncConfigured: !!env.KF_SYNC_DB?.prepare,
         accessConfigured:
           !!env.KEEPFLIP_ACCESS_TOKEN,
         registryConfigured:
@@ -2105,7 +2107,7 @@ export default {
     }
     if (
       request.method === 'OPTIONS' &&
-      (path === '/lookup' || path === '/image-lookup' || path === '/image' || path === '/cardos/test' || path === '/cardos/vision')
+      (path === '/lookup' || path === '/image-lookup' || path === '/image' || path === '/cardos/test' || path === '/cardos/vision' || path === '/sync/snapshot')
     ) {
       if (!origin) {
         return reply({
@@ -2126,8 +2128,8 @@ export default {
       });
     }
     if (
-      !(request.method === 'POST' && (path === '/lookup' || path === '/image-lookup' || path === '/cardos/test' || path === '/cardos/vision')) &&
-      !(request.method === 'GET' && path === '/image')
+      !(request.method === 'POST' && (path === '/lookup' || path === '/image-lookup' || path === '/cardos/test' || path === '/cardos/vision' || path === '/sync/snapshot')) &&
+      !(request.method === 'GET' && (path === '/image' || path === '/sync/status' || path === '/sync/snapshot'))
     ) {
       return reply({
         error: 'Niet gevonden'
@@ -2164,7 +2166,13 @@ export default {
       if (path === '/image') {
         return await serveVerifiedImage(new URL(request.url).searchParams.get('url'), request, origin);
       }
-      const payloadLimit = path === '/cardos/vision' ? 14_100_000 : MAX_BODY;
+      // Authenticated read-only private snapshot endpoints.
+      if (request.method === 'GET' && path === '/sync/status')
+        return reply(await syncStatus(env),200,origin);
+      if (request.method === 'GET' && path === '/sync/snapshot')
+        return reply(await syncRead(env),200,origin);
+      const payloadLimit = path === '/cardos/vision' ? 14_100_000 :
+        path === '/sync/snapshot' ? 1_500_000 : MAX_BODY;
       if (
         Number(
           request.headers.get('Content-Length') || 0
@@ -2187,6 +2195,14 @@ export default {
         return reply({
           error: 'Ongeldige JSON'
         }, 400, origin);
+      }
+      if (request.method === 'POST' && path === '/sync/snapshot') {
+        const result=await syncWrite(env,data);
+        return reply(result,
+          result.status==='conflict'?409:
+          result.status==='invalid-input'?400:
+          result.status==='payload-too-large'?413:200,
+          origin);
       }
       if(path === '/cardos/vision') {
         // Existing Bearer-token and origin checks have already passed.
