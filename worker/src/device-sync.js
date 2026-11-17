@@ -11,6 +11,22 @@ const LIMIT=1_500_000;
 const DEVICE_ID=/^[a-z0-9_-]{8,72}$/i;
 const BASE64=/^[A-Za-z0-9+/]+={0,2}$/;
 const DB_UNAVAILABLE={status:'not-configured',synced:false};
+
+const initialized=new WeakSet();
+async function ensureSchema(db){
+  if(initialized.has(db))return;
+  // Idempotent schema bootstrap within the dedicated TEST D1 binding.
+  // No DROP, no schema migrations to other applications, no inventory writes.
+  await db.prepare("CREATE TABLE IF NOT EXISTS keepflip_sync_state "+
+    "(id TEXT PRIMARY KEY CHECK(id='personal'),revision INTEGER NOT NULL "+
+    "CHECK(revision>0),envelope TEXT NOT NULL,updated_at TEXT NOT NULL,"+
+    "device_id TEXT NOT NULL,bytes INTEGER NOT NULL "+
+    "CHECK(bytes>0 AND bytes<=1500000))").run();
+  await db.prepare("CREATE TABLE IF NOT EXISTS keepflip_sync_history "+
+    "(revision INTEGER PRIMARY KEY,envelope TEXT NOT NULL,"+
+    "updated_at TEXT NOT NULL,device_id TEXT NOT NULL)").run();
+  initialized.add(db);
+}
 function isBound(env){return Boolean(env?.KF_SYNC_DB?.prepare);}
 function validEnvelope(envelope){
   if(!envelope || typeof envelope!=='object' || Array.isArray(envelope))return false;
@@ -32,6 +48,7 @@ function response(status,extra={}){return {status,...extra};}
 export async function syncStatus(env){
   if(!isBound(env))return DB_UNAVAILABLE;
   try{
+    await ensureSchema(env.KF_SYNC_DB);
     const row=await env.KF_SYNC_DB.prepare(
       "SELECT revision,updated_at,device_id,bytes FROM keepflip_sync_state WHERE id=?"
     ).bind(ROW).first();
@@ -71,6 +88,7 @@ export async function syncWrite(env,input) {
   if(serialized.length>LIMIT)return response('payload-too-large');
   const next=expected+1,now=new Date().toISOString();
   try{
+    await ensureSchema(env.KF_SYNC_DB);
     const result=expected===0
       ?await env.KF_SYNC_DB.prepare(
         "INSERT OR IGNORE INTO keepflip_sync_state(id,revision,envelope,updated_at,device_id,bytes) VALUES(?,?,?,?,?,?)"
