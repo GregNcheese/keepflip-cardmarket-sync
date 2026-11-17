@@ -2107,7 +2107,7 @@ export default {
     }
     if (
       request.method === 'OPTIONS' &&
-      (path === '/lookup' || path === '/image-lookup' || path === '/image' || path === '/cardos/test' || path === '/cardos/vision' || path === '/sync/snapshot')
+      (path === '/lookup' || path === '/image-lookup' || path === '/image' || path === '/cardos/test' || path === '/cardos/vision' || path === '/sync/snapshot' || path === '/sync/status')
     ) {
       if (!origin) {
         return reply({
