@@ -1,0 +1,58 @@
+name: Keep & Flip 2.21.22 — 200 real cross-era cards (NO KEYS)
+on:
+  push:
+    branches: [test/universal-photo-engine-22122]
+    paths:
+      - scripts/build_photo_benchmark_200.py
+      - tests/test_photo_benchmark_200.py
+      - .github/workflows/photo-benchmark-200-22122.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: keepflip-photo-benchmark-22122
+  cancel-in-progress: false
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline benchmark builder validation
+        run: python -m unittest discover -s tests -p 'test_photo_benchmark_200.py' -v
+      - name: Build 200 real catalog references across languages and release years
+        run: python scripts/build_photo_benchmark_200.py --out test-data/photo-benchmark-22122
+      - name: Verify exactly 200 references with mandatory regressions
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('test-data/photo-benchmark-22122/benchmark-200.json').read_text())
+          assert len(d['cases'])==200
+          assert d['languageCounts']=={'en':100,'ja':90,'ko':4,'zh-cn':3,'zh-tw':3}
+          assert d['uniqueSets']>=85, d['uniqueSets']
+          assert len(d['uniqueYears'])>=10, d['uniqueYears']
+          assert any(c['set']=='Dialga Half Deck' and c['name']=='Dialga Lv70' for c in d['cases'])
+          assert any(c['set']=='EX Battle Boost' and c['number']=='013/093' for c in d['cases'])
+          assert any(c['set']=='30th Celebration' and c['number']=='024' for c in d['cases'])
+          assert any(c['set']=='Battle Partners' for c in d['cases'])
+          assert any(c['set']=='MEGA Dream ex' for c in d['cases'])
+          print('BENCHMARK_VALIDATED_200',d['languageCounts'],d['uniqueSets'],d['uniqueYears'])
+          PY
+      - name: Commit reproducible anonymized test dataset
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add test-data/photo-benchmark-22122/
+          if ! git diff --cached --quiet; then
+            git commit -m "test(photos): 200 real historical multilingual regression cases [skip ci]"
+            git push origin HEAD:test/universal-photo-engine-22122
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keepflip-200-real-card-testcases
+          path: test-data/photo-benchmark-22122/
+          retention-days: 30
