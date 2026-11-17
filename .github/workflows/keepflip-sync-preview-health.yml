@@ -22,7 +22,8 @@ jobs:
           import json, os, sys, time, urllib.request
           url=os.environ['PREVIEW_URL']
           result=None
-          for attempt in range(16):
+          last_error='not attempted'
+          for attempt in range(4):
               try:
                   with urllib.request.urlopen(
                     urllib.request.Request(url,headers={'Accept':'application/json'}),
@@ -31,10 +32,11 @@ jobs:
                       result=json.load(r)
                   if result.get('status')=='online' and result.get('version')=='2.1.8':
                       break
-              except Exception: pass
-              time.sleep(6)
+              except Exception as e:
+                  last_error=f'{type(e).__name__}: {e}'
+              time.sleep(3)
           if not result or result.get('status')!='online':
-              sys.exit('New test-preview not online')
+              sys.exit('New test-preview not online: '+str(last_error))
           print('TEST_PREVIEW_HEALTH '+json.dumps({
               'online':result.get('status')=='online',
               'version':result.get('version'),
